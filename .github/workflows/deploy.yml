@@ -30,7 +30,7 @@ jobs:
           DEBUG: ${{ secrets.DEBUG }}
           ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
         run: |
-          scp -i ~/.ssh/private_key -r . root@${{ secrets.SERVER_IP }}:/app
+          rsync -avz -e "ssh -i ~/.ssh/private_key" --exclude='.git' --exclude='.gitignore' ./ root@${{ secrets.SERVER_IP }}:/app
           ssh -i ~/.ssh/private_key root@${{ secrets.SERVER_IP }} "
             export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}' &&
             export DB_HOST='${{ secrets.DB_HOST }}' &&
