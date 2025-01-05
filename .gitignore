@@ -2,3 +2,5 @@ env/
 # Ignore IDE-specific files
 .idea/
 .env
+# Ignore staticfiles directory
+staticfiles/
