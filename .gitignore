@@ -1,5 +1,5 @@
-env/
 # Ignore IDE-specific files
+env/
 .idea/
 .env
 # Ignore staticfiles directory
