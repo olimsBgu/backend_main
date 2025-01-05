@@ -1,3 +1,4 @@
 env/
 # Ignore IDE-specific files
 .idea/
+.env
