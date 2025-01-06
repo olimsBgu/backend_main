@@ -50,7 +50,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     hashed_login_code = models.CharField(max_length=128, blank=True, null=True)
     login_code_expires_at = models.DateTimeField(null=True, blank=True)
     is_staff = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     groups = models.ManyToManyField(
         "auth.Group",
