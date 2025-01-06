@@ -160,7 +160,7 @@ def login(request, payload: VerifyCodeSchema):
     }
 
 
-@router.post("/refresh", response=TokenRefreshOutputSchema)
+@router.post("/refresh/", response=TokenRefreshOutputSchema)
 def refresh_token(request, payload: TokenRefreshInputSchema):
     """
     Refresh the access token using the refresh token.
@@ -176,7 +176,7 @@ def refresh_token(request, payload: TokenRefreshInputSchema):
         raise HttpError(400, f"Invalid or expired refresh token: {str(e)}")
 
 
-@router.post("/logout")
+@router.post("/logout/")
 def logout(request, payload: LogoutSchema):
     """
     Log out a user by blacklisting their refresh token.
@@ -190,14 +190,14 @@ def logout(request, payload: LogoutSchema):
         raise HttpError(400, f"Failed to log out: {str(e)}")
 
 
-@router.get("/profile", response=ProfileSchema, auth=JWTBearer())
+@router.get("/profile/", response=ProfileSchema, auth=JWTBearer())
 def get_profile(request):
     """Return the authenticated user's profile."""
     user = request.auth
     return user
 
 
-@router.put("/profile", response=ProfileSchema, auth=JWTBearer())
+@router.put("/profile/", response=ProfileSchema, auth=JWTBearer())
 def update_profile(request, payload: UpdateProfileSchema):
     """Update the authenticated user's profile."""
     user = request.auth
@@ -210,7 +210,7 @@ def update_profile(request, payload: UpdateProfileSchema):
     return user
 
 
-@router.get("/users", response=UserListSchema, auth=JWTBearer())
+@router.get("/users/", response=UserListSchema, auth=JWTBearer())
 def get_potential_pairs(request):
     """Return a list of users with whom the authenticated user can form a pair."""
     user = request.auth
@@ -239,7 +239,7 @@ def get_potential_pairs(request):
     return {"users": potential_pairs}
 
 
-@router.post("/image", response=ImageUploadResponseSchema, auth=JWTAuth())
+@router.post("/image/", response=ImageUploadResponseSchema, auth=JWTAuth())
 def upload_image(request, image: UploadedFile = File(...)):
     """Handle image uploads for the authenticated user."""
     user = request.auth  # Get the authenticated user
