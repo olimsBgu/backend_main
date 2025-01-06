@@ -3,6 +3,10 @@ from datetime import date
 from typing import Optional, List
 
 from ninja import Schema
+from ninja.errors import ValidationError
+from pydantic import EmailStr, constr, validator
+
+import re
 
 
 class VerifyEmailSchema(Schema):
@@ -40,9 +44,29 @@ class ProfileSchema(Schema):
 
 
 class UpdateProfileSchema(Schema):
-    name: Optional[str] = None
-    surname: Optional[str] = None
-    phone: Optional[str] = None
+    name: constr(min_length=2, max_length=50)  # Имя
+    surname: constr(min_length=2, max_length=50)  #
+    phone: str  # Валидация номера телефона
+
+    # Дополнительные валидаторы
+    @validator('name')
+    def name_no_special_characters(cls, value):
+        if not value.isalpha():
+            raise ValueError('Имя должно содержать только буквы')
+        return value
+
+    @validator('surname')
+    def surname_no_special_characters(cls, value):
+        if not value.isalpha():
+            raise ValueError('Фамилия должна содержать только буквы')
+        return value
+
+    @validator('phone')
+    def validate_phone(cls, value):
+        if not re.fullmatch(r'^0\d{9}$', value):
+            raise ValueError('Номер телефона должен быть в формате 0********* (9 цифр)')
+        return value
+
     birthdate: Optional[date] = None
     city: Optional[str] = None
     university: Optional[str] = None
