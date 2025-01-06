@@ -35,6 +35,6 @@ jobs:
         run: |
           python manage.py migrate --settings=rimonim.settings.test
 
-      - name: Run tests
+      - name: Run pytest
         run: |
-          python manage.py test --settings=rimonim.settings.test
+          pytest --ds=rimonim.settings.test --maxfail=5 --disable-warnings

@@ -29,6 +29,8 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DEBUG: ${{ secrets.DEBUG }}
           ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
+          EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
         run: |
           rsync -avz -e "ssh -i ~/.ssh/private_key" --exclude='.git' --exclude='.gitignore' ./ root@${{ secrets.SERVER_IP }}:/app
           ssh -i ~/.ssh/private_key root@${{ secrets.SERVER_IP }} "
@@ -39,6 +41,8 @@ jobs:
             export DB_PASSWORD='${{ secrets.DB_PASSWORD }}' &&
             export DEBUG='${{ secrets.DEBUG }}' &&
             export ALLOWED_HOSTS='${{ secrets.ALLOWED_HOSTS }}' &&
+            export EMAIL_HOST_USER='${{ secrets.EMAIL_HOST_USER }}' &&
+            export EMAIL_HOST_PASSWORD='${{ secrets.EMAIL_HOST_PASSWORD }}' &&
             cd /app &&
             docker-compose down &&
             docker-compose up -d --build

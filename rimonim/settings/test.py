@@ -3,9 +3,9 @@ from .base import *
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'test_db',
-        'USER': 'test_user',
-        'PASSWORD': 'test_password',
+        'NAME': 'rimonim_db',
+        'USER': 'rimonim_user',
+        'PASSWORD': 'securepassword',
         'HOST': 'localhost',
         'PORT': 5432,
     }
