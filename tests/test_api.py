@@ -4,7 +4,6 @@ import shutil
 import pytest
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
-from django.core import mail
 from django.urls import reverse
 from ninja_jwt.tokens import RefreshToken
 
