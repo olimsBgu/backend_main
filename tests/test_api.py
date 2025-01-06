@@ -16,7 +16,7 @@ def test_verify_email(client, mocker):
     email = "testuser@example.com"
 
     # Mock send_mail to avoid actually sending an email
-    mock_send_mail = mocker.patch("django.core.mail.send_mail", autospec=True)
+    mock_send_mail = mocker.patch("api.views.send_mail", autospec=True)
 
     # Use the correct reverse path for the API
     response = client.post(reverse("api:verify_email"), {"email": email}, content_type="application/json")
@@ -30,7 +30,7 @@ def test_verify_email(client, mocker):
 
     # Ensure send_mail was called
     mock_send_mail.assert_called_once()
-    assert f"/confirm-email/{user.pk}" in mail.send_mail.call_args[0][1]  # Check email contains confirmation link
+    assert f"/confirm-email/{user.pk}" in mock_send_mail.call_args[0][1]  # Check email contains confirmation link
 
     # Reset mocks after the test
     mock_send_mail.reset_mock()
@@ -86,7 +86,7 @@ def test_request_login_code(client, mocker):
     user = User.objects.create(email="testuser@example.com", active=True, approved=True)
 
     # Mock send_mail
-    mock_send_mail = mocker.patch("django.core.mail.send_mail", autospec=True)
+    mock_send_mail = mocker.patch("api.views.send_mail", autospec=True)
 
     response = client.post(
         reverse("api:send_login_code"),
