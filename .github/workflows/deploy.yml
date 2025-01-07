@@ -63,9 +63,9 @@ jobs:
       - name: Sync .env and docker-compose to Server
         run: |
           scp -i ~/.ssh/id_rsa .env docker-compose.yml root@${{ secrets.SERVER_IP }}:/app
-          ssh -i ~/.ssh/id_rsa root@${{ secrets.SERVER_IP }} "
+          ssh -i ~/.ssh/id_rsa root@${{ secrets.SERVER_IP }} <<'EOF'
             echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
             cd /app
             docker-compose pull backend
             docker-compose up -d
-          "
+          EOF
