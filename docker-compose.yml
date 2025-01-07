@@ -7,15 +7,14 @@ services:
     env_file:
       - .env
     volumes:
-      - .:/app
-      - ./static:/app/static
-      - ./staticfiles:/app/staticfiles
+      - ./static:/app/static  # For serving static files from the host
+      - ./staticfiles:/app/staticfiles  # For serving collected static files
+      - ./media:/app/media  # For user-uploaded files if needed
     ports:
       - "8000:8000"
     restart: always
     depends_on:
       - db
-
   db:
     image: postgres:14
     container_name: rimonim_postgres

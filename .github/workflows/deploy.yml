@@ -46,28 +46,25 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      # Deploy to the server
-      - name: Deploy to Server
+      - name: Create .env locally
         run: |
+          cat <<EOF > .env
+          DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DEBUG=${{ secrets.DEBUG }}
+          ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
+          EMAIL_HOST_USER=${{ secrets.EMAIL_HOST_USER }}
+          EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
+          EOF
+
+      - name: Sync .env and docker-compose to Server
+        run: |
+          scp -i ~/.ssh/id_rsa .env docker-compose.yml root@${{ secrets.SERVER_IP }}:/app
           ssh -i ~/.ssh/id_rsa root@${{ secrets.SERVER_IP }} "
             echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-
-            # Create or overwrite the .env file with secrets
-            cat <<EOF > /app/.env
-            DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
-            DB_HOST=${{ secrets.DB_HOST }}
-            DB_NAME=${{ secrets.DB_NAME }}
-            DB_USER=${{ secrets.DB_USER }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            DEBUG=${{ secrets.DEBUG }}
-            ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
-            EMAIL_HOST_USER=${{ secrets.EMAIL_HOST_USER }}
-            EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
-            EOF
-
-            # Sync docker-compose.yml and restart containers
-            mkdir -p /app
-            rsync -avz ./docker-compose.yml root@${{ secrets.SERVER_IP }}:/app
             cd /app
             docker-compose pull backend
             docker-compose up -d
