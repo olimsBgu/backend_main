@@ -9,7 +9,7 @@ from pydantic import EmailStr, constr, validator
 import re
 
 class VerifyEmailSchema(Schema):
-    email: EmailStr
+    email: EmailStr  # Email validation
 
 
 
@@ -45,9 +45,9 @@ class ProfileSchema(Schema):
 
 
 class UpdateProfileSchema(Schema):
-    name: constr(min_length=2, max_length=50)  # Имя
-    surname: constr(min_length=2, max_length=50)  #
-    phone: str  # Валидация номера телефона
+    name: constr(min_length=2, max_length=50)
+    surname: constr(min_length=2, max_length=50)
+    phone: str
     birthdate: date
     city: constr(min_length=2, max_length=100)
     university: Optional[str] = None
@@ -56,25 +56,25 @@ class UpdateProfileSchema(Schema):
     description: Optional[str] = None
 
     # Дополнительные валидаторы
-    @validator('name')
+    @validator('name')  # Name validation
     def name_no_special_characters(cls, value):
         if not value.isalpha():
             raise ValueError('Имя должно содержать только буквы')
         return value
 
-    @validator('surname')
+    @validator('surname')  # Surname validation
     def surname_no_special_characters(cls, value):
         if not value.isalpha():
             raise ValueError('Фамилия должна содержать только буквы')
         return value
 
-    @validator('phone')
+    @validator('phone')  # Phone number validation
     def validate_phone(cls, value):
         if not re.fullmatch(r'^0\d{9}$', value):
             raise ValueError('Номер телефона должен быть в формате 0********* (9 цифр)')
         return value
 
-    @validator('birthdate')
+    @validator('birthdate')  # Birthdate validation
     def validate_birth_date(cls, value):
         today = date.today()
         if value >= today:
@@ -83,13 +83,13 @@ class UpdateProfileSchema(Schema):
             raise ValueError('Дата рождения слишком старая')
         return value
 
-    @validator('city')
+    @validator('city')  # City validation
     def validate_city(cls, value):
         if not value.isalpha():
             raise ValueError('Название города должно содержать только буквы')
         return value.capitalize()
 
-    @validator('interests', each_item=True)
+    @validator('interests', each_item=True)  # Interests validation
     def validate_interest(cls, value):
         if not value.isalpha():
             raise ValueError('Интересы должны содержать только буквы')
