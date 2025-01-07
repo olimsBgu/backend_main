@@ -14,9 +14,9 @@ jobs:
         ports:
           - 5432:5432
         env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
+          POSTGRES_USER: rimonim_user
+          POSTGRES_PASSWORD: securepassword
+          POSTGRES_DB: rimonim_db
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -35,6 +35,6 @@ jobs:
         run: |
           python manage.py migrate --settings=rimonim.settings.test
 
-      - name: Run tests
+      - name: Run pytest
         run: |
-          python manage.py test --settings=rimonim.settings.test
+          pytest --ds=rimonim.settings.test --maxfail=5 --disable-warnings
