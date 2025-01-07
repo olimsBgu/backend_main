@@ -7,16 +7,9 @@ from ninja.errors import ValidationError
 from pydantic import EmailStr, constr, validator
 
 import re
-import email_validator
 
 class VerifyEmailSchema(Schema):
-    email: str
-
-    @validator('email')
-    def validate_email(cls, value):
-        if email_validator.validate_email(value):
-            return value
-        raise ValueError('Почта не подтверждена')
+    email: EmailStr
 
 
 
