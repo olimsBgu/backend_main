@@ -74,9 +74,11 @@ jobs:
           ssh -i ~/.ssh/id_rsa root@${{ secrets.SERVER_IP }} <<'EOF'
             echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
             cd /app
-            # Stop and clean up old containers
-            docker-compose down
-            # Pull latest images and recreate containers
-            docker-compose pull
-            docker-compose up -d
+            # Stop and remove only the backend container
+            docker-compose stop backend
+            docker-compose rm -f backend  
+            # Pull and recreate only the backend container
+            docker-compose pull backend
+            docker-compose up -d backend
+            docker image prune -af
           EOF
