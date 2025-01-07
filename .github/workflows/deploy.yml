@@ -60,12 +60,12 @@ jobs:
           EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
           EOF
 
-      - name: Sync .env and docker-compose to Server
+      - name: Deploy
         run: |
-          scp -i ~/.ssh/id_rsa .env docker-compose.yml root@${{ secrets.SERVER_IP }}:/app
+          scp -i ~/.ssh/id_rsa .env docker-compose.yml nginx/default.conf root@${{ secrets.SERVER_IP }}:/app/nginx/
           ssh -i ~/.ssh/id_rsa root@${{ secrets.SERVER_IP }} <<'EOF'
             echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
             cd /app
-            docker-compose pull backend
+            docker-compose pull
             docker-compose up -d
           EOF
