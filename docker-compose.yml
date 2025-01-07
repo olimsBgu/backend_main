@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    image: mihsemen/rimonim-backend:latest
+    image: mihtsemen/rimonim-backend:latest
     container_name: rimonim_backend
     env_file:
       - .env
