@@ -47,6 +47,12 @@ class UpdateProfileSchema(Schema):
     name: constr(min_length=2, max_length=50)  # Имя
     surname: constr(min_length=2, max_length=50)  #
     phone: str  # Валидация номера телефона
+    birthdate: date
+    city: constr(min_length=2, max_length=100)
+    university: Optional[str] = None
+    field_of_study: Optional[str] = None
+    interests: Optional[List[str]] = None
+    description: Optional[str] = None
 
     # Дополнительные валидаторы
     @validator('name')
@@ -67,12 +73,27 @@ class UpdateProfileSchema(Schema):
             raise ValueError('Номер телефона должен быть в формате 0********* (9 цифр)')
         return value
 
-    birthdate: Optional[date] = None
-    city: Optional[str] = None
-    university: Optional[str] = None
-    field_of_study: Optional[str] = None
-    interests: Optional[List[str]] = None
-    description: Optional[str] = None
+    @validator('birthdate')
+    def validate_birth_date(cls, value):
+        today = date.today()
+        if value >= today:
+            raise ValueError('Дата рождения должна быть в прошлом')
+        if (today.year - value.year) > 120:
+            raise ValueError('Дата рождения слишком старая')
+        return value
+
+    @validator('city')
+    def validate_city(cls, value):
+        if not value.isalpha():
+            raise ValueError('Название города должно содержать только буквы')
+        return value.capitalize()
+
+    @validator('interests', each_item=True)
+    def validate_interest(cls, value):
+        if not value.isalpha():
+            raise ValueError('Интересы должны содержать только буквы')
+        return value.capitalize()
+
 
 
 class SimpleUserSchema(Schema):
