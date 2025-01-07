@@ -60,9 +60,14 @@ jobs:
           EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
           EOF
 
+      - name: Prepare nginx directory on server
+        run: |
+          ssh -i ~/.ssh/id_rsa root@${{ secrets.SERVER_IP }} "mkdir -p /app/nginx"
+
       - name: Deploy
         run: |
-          scp -i ~/.ssh/id_rsa .env docker-compose.yml nginx/default.conf root@${{ secrets.SERVER_IP }}:/app/nginx/
+          scp -i ~/.ssh/id_rsa .env docker-compose.yml root@${{ secrets.SERVER_IP }}:/app/
+          scp -i ~/.ssh/id_rsa nginx/default.conf root@${{ secrets.SERVER_IP }}:/app/nginx/
           ssh -i ~/.ssh/id_rsa root@${{ secrets.SERVER_IP }} <<'EOF'
             echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
             cd /app
