@@ -1,3 +1,4 @@
+import datetime
 import os
 import shutil
 
@@ -211,7 +212,7 @@ def test_update_profile(client):
     # Send a PUT request with the updated data
     response = client.put(
         reverse("api:update_profile"),
-        data={"name": "Updated Name", "description": "Updated description"},
+        data={"name": "Semen", "description": "Updated description", "phone": "+972559633414"},
         content_type="application/json",
         HTTP_AUTHORIZATION=f"Bearer {access_token}"  # Bearer token in header
     )
@@ -219,13 +220,74 @@ def test_update_profile(client):
     # Assert the response
     assert response.status_code == 200
     response_data = response.json()
-    assert response_data["name"] == "Updated Name"
+    assert response_data["name"] == "Semen"
     assert response_data["description"] == "Updated description"
+    assert response_data["phone"] == "+972559633414"
 
     # Verify that the user's data is updated in the database
     user.refresh_from_db()
-    assert user.name == "Updated Name"
+    assert user.name == "Semen"
     assert user.description == "Updated description"
+    assert user.phone == "+972559633414"
+
+@pytest.mark.django_db
+def test_update_profile_valid_data(client):
+    # Создаем тестового пользователя
+    user = User.objects.create(
+        email="test@example.com",
+        name="Test",
+        surname="User",
+        active=True,
+        approved=True,
+        personal_id="123456789",
+        images=[],
+    )
+
+    # Генерируем токен
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    # Отправляем PUT-запрос с корректными данными
+    response = client.put(
+        reverse("api:update_profile"),
+        data={
+            "name": "Semen",
+            "surname": "Goyda",
+            "description": "Updated description",
+            "phone": "+972559633414",
+            "birthdate": "1990-01-01",
+            "city": "Telaviv",
+            "university": "BGU",
+            "field_of_study": "Computer Science",
+            "interests": ["Programming", "Gaming"]
+        },
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access_token}",
+    )
+
+    # Проверяем, что запрос успешен
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["name"] == "Semen"
+    assert response_data["surname"] == "Goyda"
+    assert response_data["description"] == "Updated description"
+    assert response_data["phone"] == "+972559633414"
+    assert response_data["birthdate"] == "1990-01-01"
+    assert response_data["city"] == "Telaviv"
+    assert response_data["university"] == "BGU"
+    assert response_data["field_of_study"] == "Computer Science"
+
+    # Убедимся, что данные обновились в базе
+    user.refresh_from_db()
+    assert user.name == "Semen"
+    assert user.surname == "Goyda"
+    assert user.description == "Updated description"
+    assert user.phone == "+972559633414"
+    assert user.birthdate == datetime.date(1990, 1, 1)
+    assert user.city == "Telaviv"
+    assert user.university == "BGU"
+    assert user.field_of_study == "Computer Science"
+
 
 
 @pytest.mark.django_db
