@@ -232,7 +232,7 @@ def test_update_profile(client):
 
 @pytest.mark.django_db
 def test_update_profile_valid_data(client):
-    # Создаем тестового пользователя
+    # Create a test user
     user = User.objects.create(
         email="test@example.com",
         name="Test",
@@ -243,11 +243,11 @@ def test_update_profile_valid_data(client):
         images=[],
     )
 
-    # Генерируем токен
+    # Generate a JWT token for the user
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
 
-    # Отправляем PUT-запрос с корректными данными
+    # Send a PUT request with the updated data
     response = client.put(
         reverse("api:update_profile"),
         data={
@@ -265,7 +265,7 @@ def test_update_profile_valid_data(client):
         HTTP_AUTHORIZATION=f"Bearer {access_token}",
     )
 
-    # Проверяем, что запрос успешен
+    # Assert the response
     assert response.status_code == 200
     response_data = response.json()
     assert response_data["name"] == "Semen"
@@ -277,7 +277,7 @@ def test_update_profile_valid_data(client):
     assert response_data["university"] == "BGU"
     assert response_data["field_of_study"] == "Computer Science"
 
-    # Убедимся, что данные обновились в базе
+    # Verify that the user's data is updated in the database
     user.refresh_from_db()
     assert user.name == "Semen"
     assert user.surname == "Goyda"
