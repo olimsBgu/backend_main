@@ -150,8 +150,9 @@ def login(request, payload: VerifyCodeSchema):
         return {"error": "Invalid login code."}
 
     # Clear the hashed login code after successful login
-    user.hashed_login_code = None
-    user.save()
+    # TODO: Enable deletion of login code after login ui will be done
+    # user.hashed_login_code = None
+    # user.save()
 
     refresh = RefreshToken.for_user(user)
     return {
