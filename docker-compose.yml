@@ -2,40 +2,29 @@ version: '3.8'
 
 services:
   backend:
-    build:
-      context: .
+    image: mihtsemen/rimonim-backend:latest
     container_name: rimonim_backend
-    environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-default_secret_key}
-      DB_HOST: ${DB_HOST:-db}
-      DB_NAME: ${DB_NAME:-test_db}
-      DB_USER: ${DB_USER:-test_user}
-      DB_PASSWORD: ${DB_PASSWORD:-securepassword}
-      DEBUG: ${DEBUG:-1}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      DJANGO_SETTINGS_MODULE: rimonim.settings.base
-      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-test_email_host_user}
-      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-test_email_host_password}
+    env_file:
+      - .env
     volumes:
-      - .:/app
-      - ./static:/app/static
-      - ./staticfiles:/app/staticfiles
+      - ./static:/app/static  # For serving static files from the host
+      - ./staticfiles:/app/staticfiles  # For serving collected static files
+      - ./media:/app/media  # For user-uploaded files if needed
     ports:
       - "8000:8000"
+    restart: always
     depends_on:
       - db
-
   db:
     image: postgres:14
     container_name: rimonim_postgres
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-rimonim_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepassword}
-      POSTGRES_DB: ${POSTGRES_DB:-rimonim_db}
     ports:
       - "5432:5432"
+    restart: always
 
   nginx:
     image: nginx:latest
@@ -46,8 +35,7 @@ services:
       - ./media:/app/media
     ports:
       - "80:80"
-    depends_on:
-      - backend
+    restart: always
 
 volumes:
   postgres_data:
