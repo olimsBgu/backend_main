@@ -126,8 +126,9 @@ def test_login(client):
     assert "refresh_token" in data
 
     # Ensure the login code is cleared
-    user.refresh_from_db()
-    assert user.hashed_login_code is None
+    # TODO: Enable deletion of login code after login ui will be done
+    # user.refresh_from_db()
+    # assert user.hashed_login_code is None
 
 
 @pytest.mark.django_db
