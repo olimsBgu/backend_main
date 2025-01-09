@@ -289,6 +289,141 @@ def test_update_profile_valid_data(client):
     assert user.field_of_study == "Computer Science"
 
 
+@pytest.mark.django_db
+def test_update_profile_invalid_phone(client):
+    user = User.objects.create(
+        email="test@example.com",
+        name="Test",
+        surname="User",
+        active=True,
+        approved=True,
+        personal_id="123456789",
+        images=[],
+    )
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    # Sending wrong phone field
+    response = client.put(
+        reverse("api:update_profile"),
+        data={"phone": "559633414"},  # Wrong data
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access_token}",
+    )
+
+    # Checking for error
+    assert response.status_code == 422
+    response_data = response.json()
+    print(response_data)
+    assert 'detail' in response_data
+    assert 'type' in response_data['detail'][0]
+    assert 'value_error' == response_data['detail'][0]['type']
+    assert 'loc' in response_data['detail'][0]
+    assert 'phone' == response_data['detail'][0]['loc'][2]
+
+
+@pytest.mark.django_db
+def test_update_profile_invalid_name(client):
+    user = User.objects.create(
+        email="test@example.com",
+        name="Test",
+        surname="User",
+        active=True,
+        approved=True,
+        personal_id="123456789",
+        images=[],
+    )
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    # Sending wrong name field
+    response = client.put(
+        reverse("api:update_profile"),
+        data={"name": "a4"},  # Wrong data
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access_token}",
+    )
+
+    # Checking for error
+    assert response.status_code == 422
+    response_data = response.json()
+    print(response_data)
+    assert 'detail' in response_data
+    assert 'type' in response_data['detail'][0]
+    assert 'value_error' == response_data['detail'][0]['type']
+    assert 'loc' in response_data['detail'][0]
+    assert 'name' == response_data['detail'][0]['loc'][2]
+
+
+@pytest.mark.django_db
+def test_update_profile_invalid_birthdate(client):
+    user = User.objects.create(
+        email="test@example.com",
+        name="Test",
+        surname="User",
+        active=True,
+        approved=True,
+        personal_id="123456789",
+        images=[],
+    )
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    # Sending wrong birthdate field
+    response = client.put(
+        reverse("api:update_profile"),
+        data={"birthdate": "2050-01-01"},  # Wrong data
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access_token}",
+    )
+
+    # Checking for error
+    assert response.status_code == 422
+    response_data = response.json()
+    print(response_data)
+    assert 'detail' in response_data
+    assert 'type' in response_data['detail'][0]
+    assert 'value_error' == response_data['detail'][0]['type']
+    assert 'loc' in response_data['detail'][0]
+    assert 'birthdate' == response_data['detail'][0]['loc'][2]
+
+
+@pytest.mark.django_db
+def test_update_profile_invalid_city(client):
+    user = User.objects.create(
+        email="test@example.com",
+        name="Test",
+        surname="User",
+        active=True,
+        approved=True,
+        personal_id="123456789",
+        images=[],
+    )
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    # Sending wrong city field
+    response = client.put(
+        reverse("api:update_profile"),
+        data={"city": "town1"},  # Wrong data
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {access_token}",
+    )
+
+    # Checking for error
+    assert response.status_code == 422
+    response_data = response.json()
+    print(response_data)
+    assert 'detail' in response_data
+    assert 'type' in response_data['detail'][0]
+    assert 'value_error' == response_data['detail'][0]['type']
+    assert 'loc' in response_data['detail'][0]
+    assert 'city' == response_data['detail'][0]['loc'][2]
+
 
 @pytest.mark.django_db
 def test_get_potential_pairs(client):
