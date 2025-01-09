@@ -1,12 +1,10 @@
+import re
 import uuid
 from datetime import date
 from typing import Optional, List
 
 from ninja import Schema
-from ninja.errors import ValidationError
 from pydantic import EmailStr, constr, validator
-
-import re
 
 
 def validate_letters(value, field_name: str):
