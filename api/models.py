@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
 
+
 class UserManager(BaseUserManager):
     def create_user(self, email, **extra_fields):
         if not email:
@@ -28,6 +29,7 @@ class UserManager(BaseUserManager):
         user.set_password(password)
         user.save(using=self._db)
         return user
+
 
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = [

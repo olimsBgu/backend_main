@@ -7,3 +7,4 @@ psycopg[binary]>=3.1.0
 django-ninja-jwt
 pytest-django
 pytest-mock
+pydantic[email]
