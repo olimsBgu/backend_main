@@ -8,7 +8,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from ninja import Router
+from ninja import Router, Query
 from ninja import UploadedFile, File
 from ninja.errors import HttpError
 from ninja.security import HttpBearer
@@ -61,12 +61,12 @@ def verify_email(request, payload: VerifyEmailSchema):
     return {"message": "Email verification sent."}
 
 
-@router.get("/check-email/")
-def check_email(request, email: str):
-    user = User.objects.filter(email=email).first()
+@router.get("/check-email/", response=dict)
+def check_email(request, query: VerifyEmailSchema = Query(...)):
+    user = User.objects.filter(email=query.email).first()
     if user:
-        return {"email": email, "is_confirmed": user.active}
-    return {"email": email, "is_confirmed": False}
+        return {"email": query.email, "is_confirmed": user.active}
+    return {"email": query.email, "is_confirmed": False}
 
 
 @router.get("/confirm-email/{user_id}/{token}")

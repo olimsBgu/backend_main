@@ -3,10 +3,11 @@ from datetime import date
 from typing import Optional, List
 
 from ninja import Schema
+from pydantic import EmailStr
 
 
 class VerifyEmailSchema(Schema):
-    email: str
+    email: EmailStr
 
 
 class RequestCodeSchema(Schema):
