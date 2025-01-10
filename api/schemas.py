@@ -117,3 +117,8 @@ class RequestApprovalSchema(Schema):
     email: str
     personal_id: str  # Teudat Zeut
     user_type: str  # 'repatriate' or 'mentor'
+
+
+class InterestSchema(Schema):
+    id: int
+    name: str

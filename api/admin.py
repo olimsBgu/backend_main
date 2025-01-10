@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 
-from .models import User
+from .models import User, Interest
 
 
 class UserAdminForm(forms.ModelForm):
@@ -55,8 +55,8 @@ class UserAdmin(admin.ModelAdmin):
         }),
         ('Personal Information', {
             'fields': (
-            'phone', 'birthdate', 'city', 'university', 'field_of_study', 'interests', 'description', 'images',
-            'partner')
+                'phone', 'birthdate', 'city', 'university', 'field_of_study', 'interests', 'description', 'images',
+                'partner')
         }),
         ('Login Code', {
             'fields': ('raw_login_code', 'hashed_login_code'),
@@ -80,3 +80,9 @@ class UserAdmin(admin.ModelAdmin):
         queryset.update(approved=False)
 
     reject_users.short_description = "Reject selected users"
+
+
+@admin.register(Interest)
+class InterestAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
