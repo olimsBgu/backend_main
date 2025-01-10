@@ -51,14 +51,14 @@ def verify_email(request, payload: VerifyEmailSchema):
     confirmation_link = f"{request.site_url}/confirm-email/{user.pk}/{token}"
 
     # Send email
-    send_mail(
-        'Verify Your Email',
-        f'Click this link to confirm your email: {confirmation_link}',
-        'no-reply@example.com',
-        [email],
-    )
+    # send_mail(
+    #     'Verify Your Email',
+    #     f'Click this link to confirm your email: {confirmation_link}',
+    #     'no-reply@example.com',
+    #     [email],
+    # )
 
-    return {"message": "Email verification sent."}
+    return {"message": "Email verification sent.", "link": confirmation_link}
 
 
 @router.get("/check-email/", response=dict)
