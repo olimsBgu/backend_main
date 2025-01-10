@@ -204,6 +204,8 @@ LOGGING = {
 
 CORS_ALLOWED_ORIGINS = [
     "https://app.rimonim.me",
-    "http://app.rimonim.me"
+    "http://app.rimonim.me", 
+    "http://localhost:4200", 
+    "http://localhost",
 ]
 CORS_ALLOW_CREDENTIALS = True
