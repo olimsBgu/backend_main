@@ -90,6 +90,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     def is_login_code_valid(self) -> bool:
         return timezone.now() <= self.login_code_expires_at
 
+    def get_short_name(self):
+        """Return the user's short name."""
+        return self.name
+
+    def get_full_name(self):
+        """Return the user's full name."""
+        return f"{self.name} {self.surname}"
+
     def __str__(self):
         return f"{self.email} ({self.role})"
 
