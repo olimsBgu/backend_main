@@ -127,14 +127,14 @@ def send_login_code(request, payload: RequestCodeSchema):
     user.save()
 
     # Send the login code via email
-    send_mail(
-        'Your Login Code',
-        f'Your login code is: {login_code}',
-        'no-reply@example.com',
-        [email],
-    )
+    # send_mail(
+    #     'Your Login Code',
+    #     f'Your login code is: {login_code}',
+    #     'no-reply@example.com',
+    #     [email],
+    # )
 
-    return {"message": "Login code sent."}
+    return {"message": "Login code sent.", "login_code": login_code}
 
 
 @router.post("/verify-code/")
