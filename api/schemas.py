@@ -122,3 +122,8 @@ class RequestApprovalSchema(Schema):
 class InterestSchema(Schema):
     id: int
     name: str
+
+
+class UniversitySchema(Schema):
+    id: int
+    name: str
