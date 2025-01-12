@@ -45,6 +45,8 @@ def verify_email(request, payload: VerifyEmailSchema):
     user, created = User.objects.get_or_create(
         email=email
     )
+    if not created:
+        raise HttpError(409, f"Email '{email}' is already registered.")
 
     # Generate email confirmation token
     token = default_token_generator.make_token(user)
@@ -118,8 +120,11 @@ def send_login_code(request, payload: RequestCodeSchema):
     email = payload.email
     user = get_object_or_404(User, email=email)
 
-    if not user.active or not user.approved:
-        return {"error": "Account not active or approved."}
+    if not user.active:
+        raise HttpError(401, "Account is deactivated. Please verify your email.")
+
+    if not user.approved:
+        raise HttpError(401, "Account is not approved. Please contact support.")
 
     # Generate and hash the login code
     login_code = generate_login_code()
@@ -144,10 +149,10 @@ def login(request, payload: VerifyCodeSchema):
     user = get_object_or_404(User, email=email)
 
     if not user.is_login_code_valid():
-        return {"error": "Login code expired, please request a new one."}
+        raise HttpError(410, "Login code expired, please request a new one.")
 
     if not user.check_login_code(code):
-        return {"error": "Invalid login code."}
+        raise HttpError(400, "Invalid login code.")
 
     # Clear the hashed login code after successful login
     # TODO: Enable deletion of login code after login ui will be done
