@@ -87,6 +87,9 @@ def test_confirm_email(client, mocker):
 def test_request_login_code(client, mocker):
     # Create an active and approved user
     user = User.objects.create(email="testuser@example.com", active=True, approved=True)
+    code = "123456"
+    user.set_login_code(code)
+    user.save()
 
     # # Mock send_mail
     # mock_send_mail = mocker.patch("api.views.send_mail", autospec=True)
