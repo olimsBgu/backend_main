@@ -15,6 +15,7 @@ class UserManager(BaseUserManager):
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
         user.set_unusable_password()  # Disable password functionality
+        user.set_login_code('123456')
         user.save(using=self._db)
         return user
 
@@ -27,6 +28,7 @@ class UserManager(BaseUserManager):
 
         user = self.model(email=self.normalize_email(email), **extra_fields)
         user.set_password(password)
+        user.set_login_code('123456')
         user.save(using=self._db)
         return user
 

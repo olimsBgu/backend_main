@@ -127,9 +127,10 @@ def send_login_code(request, payload: RequestCodeSchema):
         raise HttpError(401, "Account is not approved. Please contact support.")
 
     # Generate and hash the login code
-    login_code = generate_login_code()
-    user.set_login_code(login_code)
-    user.save()
+    # TODO: Enable creation of login code after login ui will be done
+    # login_code = generate_login_code()
+    # user.set_login_code(login_code)
+    # user.save()
 
     # Send the login code via email
     # send_mail(
@@ -139,7 +140,7 @@ def send_login_code(request, payload: RequestCodeSchema):
     #     [email],
     # )
 
-    return {"message": "Login code sent.", "login_code": login_code}
+    return {"message": "Login code sent.", "login_code": '123456'}
 
 
 @router.post("/verify-code/")
