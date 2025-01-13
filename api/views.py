@@ -45,8 +45,9 @@ def verify_email(request, payload: VerifyEmailSchema):
     user, created = User.objects.get_or_create(
         email=email
     )
-    if not created:
-        raise HttpError(409, f"Email '{email}' is already registered.")
+    if user.active:
+        raise HttpError(409, f"Email '{email}' is already verified.")
+
 
     # Generate email confirmation token
     token = default_token_generator.make_token(user)
