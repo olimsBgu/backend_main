@@ -129,8 +129,9 @@ def send_login_code(request, payload: RequestCodeSchema):
     # Generate and hash the login code
     # TODO: Enable creation of login code after login ui will be done
     # login_code = generate_login_code()
-    # user.set_login_code(login_code)
-    # user.save()
+    login_code = '123456'
+    user.set_login_code(login_code)
+    user.save()
 
     # Send the login code via email
     # send_mail(
@@ -140,7 +141,7 @@ def send_login_code(request, payload: RequestCodeSchema):
     #     [email],
     # )
 
-    return {"message": "Login code sent.", "login_code": '123456'}
+    return {"message": "Login code sent.", "login_code": login_code}
 
 
 @router.post("/verify-code/")
