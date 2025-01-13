@@ -16,10 +16,10 @@ from ninja_jwt.authentication import JWTAuth
 from ninja_jwt.schema import TokenRefreshInputSchema, TokenRefreshOutputSchema
 from ninja_jwt.tokens import RefreshToken
 
-from .models import User, Interest, University
+from .models import User, Interest, University, City, FieldOfStudy
 from .schemas import ProfileSchema, UpdateProfileSchema, UserListSchema, ImageUploadResponseSchema, \
     RequestApprovalSchema
-from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, UniversitySchema
+from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, UniversitySchema, CitySchema, FieldOfStudySchema
 
 
 # Security class for token-based authentication
@@ -279,3 +279,15 @@ def get_interests(request):
 def get_universities(request):
     universities = University.objects.all()
     return universities
+
+
+@router.get("/cities", response=list[CitySchema])
+def get_cities(request):
+    cities = City.objects.all()
+    return cities
+
+
+@router.get("/fields-of-study", response=list[FieldOfStudySchema])
+def get_fields_of_study(request):
+    fields_of_study = FieldOfStudy.objects.all()
+    return fields_of_study

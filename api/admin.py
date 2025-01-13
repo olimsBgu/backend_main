@@ -4,7 +4,7 @@ from django.http import HttpResponseRedirect
 from django.urls import path
 from django.contrib import messages
 
-from .models import User, Interest, University
+from .models import User, Interest, University, City, FieldOfStudy
 import requests
 
 
@@ -92,8 +92,6 @@ class InterestAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-
-
 @admin.register(University)
 class UniversityAdmin(admin.ModelAdmin):
     list_display = ('id', 'name')
@@ -128,3 +126,45 @@ class UniversityAdmin(admin.ModelAdmin):
 
         self.message_user(request, 'University list was updated!', level=messages.SUCCESS)
         return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+
+@admin.register(City)
+class CityAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name')
+    search_fields = ('name',)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('update-cities/', self.admin_site.admin_view(self.update_cities),
+                 name='update-cities'),
+        ]
+        return custom_urls + urls
+
+    def update_cities(self, request):
+        """Univirsity update method with API of gov il"""
+        url = 'https://data.gov.il/api/3/action/datastore_search?resource_id=8f714b6f-c35c-4b40-a0e7-547b675eee0e&limit=1300'
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            self.message_user(request, f'Bad request to API: {response.status_code}', level=messages.ERROR)
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        data = response.json()
+        if 'result' not in data or 'records' not in data['result']:
+            self.message_user(request, 'Wrong data format from API', level=messages.ERROR)
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        for record in data['result']['records']:
+            city, created = City.objects.update_or_create(
+                name=record['city_name_en']
+            )
+
+        self.message_user(request, 'City list was updated!', level=messages.SUCCESS)
+        return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+
+@admin.register(FieldOfStudy)
+class CityAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name')
+    search_fields = ('name',)

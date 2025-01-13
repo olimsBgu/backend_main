@@ -127,3 +127,13 @@ class InterestSchema(Schema):
 class UniversitySchema(Schema):
     id: int
     name: str
+
+
+class CitySchema(Schema):
+    id: int
+    name: str
+
+
+class FieldOfStudySchema(Schema):
+    id: int
+    name: str
