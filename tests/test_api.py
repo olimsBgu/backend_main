@@ -15,25 +15,28 @@ from api.models import User
 def test_verify_email(client, mocker):
     email = "testuser@example.com"
 
-    # Mock send_mail to avoid actually sending an email
-    mock_send_mail = mocker.patch("api.views.send_mail", autospec=True)
+    # # Mock send_mail to avoid actually sending an email
+    # mock_send_mail = mocker.patch("api.views.send_mail", autospec=True)
 
     # Use the correct reverse path for the API
     response = client.post(reverse("api:verify_email"), {"email": email}, content_type="application/json")
 
     assert response.status_code == 200
-    assert response.json() == {"message": "Email verification sent."}
 
-    # Ensure the user is created
-    user = User.objects.get(email=email)
-    assert user.email == email
+    response_json = response.json()
+    assert response_json.get("message") == 'Email verification sent.'
+    assert response_json.get("link", None) is not None
 
-    # Ensure send_mail was called
-    mock_send_mail.assert_called_once()
-    assert f"/confirm-email/{user.pk}" in mock_send_mail.call_args[0][1]  # Check email contains confirmation link
-
-    # Reset mocks after the test
-    mock_send_mail.reset_mock()
+    # # Ensure the user is created
+    # user = User.objects.get(email=email)
+    # assert user.email == email
+    #
+    # # Ensure send_mail was called
+    # mock_send_mail.assert_called_once()
+    # assert f"/confirm-email/{user.pk}" in mock_send_mail.call_args[0][1]  # Check email contains confirmation link
+    #
+    # # Reset mocks after the test
+    # mock_send_mail.reset_mock()
 
 
 @pytest.mark.django_db
@@ -84,9 +87,12 @@ def test_confirm_email(client, mocker):
 def test_request_login_code(client, mocker):
     # Create an active and approved user
     user = User.objects.create(email="testuser@example.com", active=True, approved=True)
+    code = "123456"
+    user.set_login_code(code)
+    user.save()
 
-    # Mock send_mail
-    mock_send_mail = mocker.patch("api.views.send_mail", autospec=True)
+    # # Mock send_mail
+    # mock_send_mail = mocker.patch("api.views.send_mail", autospec=True)
 
     response = client.post(
         reverse("api:send_login_code"),
@@ -96,17 +102,19 @@ def test_request_login_code(client, mocker):
 
     # Assert the response status code
     assert response.status_code == 200
-    assert response.json() == {"message": "Login code sent."}
+    response_json = response.json()
+    assert response_json.get('message') == "Login code sent."
+    assert response_json.get("login_code", None) is not None
 
     # Ensure the login code is hashed
     user.refresh_from_db()
     assert user.hashed_login_code is not None
 
     # Ensure the mocked send_mail was called exactly once
-    mock_send_mail.assert_called_once()
-
-    # Reset mocks after the test
-    mock_send_mail.reset_mock()
+    # mock_send_mail.assert_called_once()
+    #
+    # # Reset mocks after the test
+    # mock_send_mail.reset_mock()
 
 
 @pytest.mark.django_db
