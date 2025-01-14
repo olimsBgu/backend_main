@@ -39,10 +39,12 @@ INSTALLED_APPS = [
     "ninja",
     "ninja_jwt",
     "ninja_jwt.token_blacklist",
+    "corsheaders",
     "api"
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -50,7 +52,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'rimonim.middleware.DynamicSiteURLMiddleware',
+    "rimonim.middleware.DynamicSiteURLMiddleware"
 ]
 
 ROOT_URLCONF = "rimonim.urls"
@@ -166,3 +168,44 @@ NINJA_JWT = {
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'debug.log'),
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
+
+
+CORS_ALLOWED_ORIGINS = [
+    "https://app.rimonim.me",
+    "http://app.rimonim.me", 
+    "http://localhost:4200", 
+    "http://localhost",
+]
+CORS_ALLOW_CREDENTIALS = True
