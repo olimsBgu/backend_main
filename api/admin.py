@@ -120,6 +120,9 @@ class UniversityAdmin(admin.ModelAdmin):
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         for record in data['result']['records']:
+            if 'NAME' not in record:
+                self.message_user(request, 'Wrong data format from API', level=messages.ERROR)
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             university, created = University.objects.update_or_create(
                 name=record['NAME']
             )
@@ -142,7 +145,7 @@ class CityAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def update_cities(self, request):
-        """Univirsity update method with API of gov il"""
+        """University update method with API of gov il"""
         url = 'https://data.gov.il/api/3/action/datastore_search?resource_id=8f714b6f-c35c-4b40-a0e7-547b675eee0e&limit=1300'
         response = requests.get(url)
 
@@ -156,6 +159,9 @@ class CityAdmin(admin.ModelAdmin):
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         for record in data['result']['records']:
+            if 'city_name_en' not in record:
+                self.message_user(request, 'Wrong data format from API', level=messages.ERROR)
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             city, created = City.objects.update_or_create(
                 name=record['city_name_en']
             )
