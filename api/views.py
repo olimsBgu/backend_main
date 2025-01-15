@@ -27,7 +27,7 @@ class JWTBearer(HttpBearer):
     def authenticate(self, request, token: str):
         user = JWTAuth().authenticate(request, token)
         if not user:
-            raise HttpError(401, "Unauthorized")
+            raise HttpError(401, "NOT_AUTH")
         return user
 
 
@@ -46,7 +46,7 @@ def verify_email(request, payload: VerifyEmailSchema):
         email=email
     )
     if user.active:
-        raise HttpError(409, f"Email '{email}' is already verified.")
+        raise HttpError(409, f"EMAIL_VERIFIED")
 
 
     # Generate email confirmation token
@@ -94,15 +94,15 @@ def request_approval(request, payload: RequestApprovalSchema):
     user = User.objects.filter(email=payload.email).first()
 
     if not user:
-        raise HttpError(400, "User does not exist.")
+        raise HttpError(400, "NOT_EXIST")
 
     # Ensure the email is confirmed
     if not user.active:
-        raise HttpError(400, "Email is not confirmed. Please verify your email.")
+        raise HttpError(400, "NOT_VERIFIED")
 
     # Check if the user has already registered details
     if user.name or user.surname or user.personal_id or user.phone or user.user_type or user.approved:
-        raise HttpError(400, "Account already registered. Please contact support for changes.")
+        raise HttpError(400, "USER_REGISTERED")
 
     # Update user details
     user.name = payload.name
@@ -122,10 +122,10 @@ def send_login_code(request, payload: RequestCodeSchema):
     user = get_object_or_404(User, email=email)
 
     if not user.active:
-        raise HttpError(401, "Account is deactivated. Please verify your email.")
+        raise HttpError(401, "NOT_VERIFIED")
 
     if not user.approved:
-        raise HttpError(401, "Account is not approved. Please contact support.")
+        raise HttpError(401, "NOT_APPROVED")
 
     # Generate and hash the login code
     # TODO: Enable creation of login code after login ui will be done
@@ -152,10 +152,10 @@ def login(request, payload: VerifyCodeSchema):
     user = get_object_or_404(User, email=email)
 
     if not user.is_login_code_valid():
-        raise HttpError(410, "Login code expired, please request a new one.")
+        raise HttpError(410, "CODE_EXPIRED")
 
     if not user.check_login_code(code):
-        raise HttpError(400, "Invalid login code.")
+        raise HttpError(400, "CODE_INVALID")
 
     # Clear the hashed login code after successful login
     # TODO: Enable deletion of login code after login ui will be done
@@ -182,7 +182,7 @@ def refresh_token(request, payload: TokenRefreshInputSchema):
         }
         return data
     except Exception as e:
-        raise HttpError(400, f"Invalid or expired refresh token: {str(e)}")
+        raise HttpError(400, f"CODE_INVALID")
 
 
 @router.post("/logout/")
@@ -196,7 +196,7 @@ def logout(request, payload: LogoutSchema):
         token.blacklist()
         return {"message": "Successfully logged out"}
     except Exception as e:
-        raise HttpError(400, f"Failed to log out: {str(e)}")
+        raise HttpError(400, f"LOGIN_FAILED")
 
 
 @router.get("/profile/", response=ProfileSchema, auth=JWTBearer())
