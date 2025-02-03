@@ -171,6 +171,6 @@ class CityAdmin(admin.ModelAdmin):
 
 
 @admin.register(FieldOfStudy)
-class CityAdmin(admin.ModelAdmin):
+class FieldOfStudyAdmin(admin.ModelAdmin):
     list_display = ('id', 'name')
     search_fields = ('name',)
