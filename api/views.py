@@ -16,10 +16,10 @@ from ninja_jwt.authentication import JWTAuth
 from ninja_jwt.schema import TokenRefreshInputSchema, TokenRefreshOutputSchema
 from ninja_jwt.tokens import RefreshToken
 
-from .models import User
+from .models import User, Interest, University, City, FieldOfStudy
 from .schemas import ProfileSchema, UpdateProfileSchema, UserListSchema, ImageUploadResponseSchema, \
     RequestApprovalSchema
-from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema
+from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, UniversitySchema, CitySchema, FieldOfStudySchema
 
 
 # Security class for token-based authentication
@@ -275,3 +275,27 @@ def upload_image(request, image: UploadedFile = File(...)):
 
     return {"message": "Image uploaded successfully",
             "image_url": f"{settings.MEDIA_URL}user_{user.public_id}/images/{filename}"}
+
+
+@router.get("/interests", response=list[InterestSchema])
+def get_interests(request):
+    interests = Interest.objects.all()
+    return [{"id": interest.id, "name": interest.name} for interest in interests]
+
+
+@router.get("/universities", response=list[UniversitySchema])
+def get_universities(request):
+    universities = University.objects.all()
+    return universities
+
+
+@router.get("/cities", response=list[CitySchema])
+def get_cities(request):
+    cities = City.objects.all()
+    return cities
+
+
+@router.get("/fields-of-study", response=list[FieldOfStudySchema])
+def get_fields_of_study(request):
+    fields_of_study = FieldOfStudy.objects.all()
+    return fields_of_study

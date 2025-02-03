@@ -8,4 +8,5 @@ django-ninja-jwt
 pytest-django
 pytest-mock
 pydantic[email]
+requests
 django-cors-headers
