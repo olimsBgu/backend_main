@@ -568,7 +568,7 @@ def test_request_approval_existing_user(client):
 
     # Assert the response
     assert response.status_code == 400
-    assert response.json() == {"detail": "Account already registered. Please contact support for changes."}
+    assert response.json() == {'detail': 'USER_REGISTERED'}
 
 
 @pytest.mark.django_db
