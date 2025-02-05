@@ -31,8 +31,11 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media
+      - ./ssl/certificate.crt:/app/ssl/certificate.crt:ro  # mount cert
+      - ./ssl/private_key.key:/app/ssl/private_key.key:ro # mount key
     ports:
       - "80:80"
+      - "443:443"
     restart: always
 
 volumes:
