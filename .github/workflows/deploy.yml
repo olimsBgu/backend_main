@@ -59,6 +59,7 @@ jobs:
           POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
           DEBUG=${{ secrets.DEBUG }}
           ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
+          CSRF_TRUSTED_ORIGINS=${{ secrets.CSRF_TRUSTED_ORIGINS }}
           EMAIL_HOST=${{ secrets.EMAIL_HOST }}
           EMAIL_PORT=${{ secrets.EMAIL_PORT }}
           EMAIL_USE_TLS=${{ secrets.EMAIL_USE_TLS }}
