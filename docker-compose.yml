@@ -8,8 +8,8 @@ services:
       - ./static:/app/static  # For serving static files from the host
       - ./staticfiles:/app/staticfiles  # For serving collected static files
       - ./media:/app/media  # For user-uploaded files if needed
-    ports:
-      - "8000:8000"
+#    ports:
+#      - "8000:8000"
     restart: always
     depends_on:
       - db
