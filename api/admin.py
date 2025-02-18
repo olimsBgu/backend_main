@@ -1,11 +1,34 @@
+import logging
+import traceback
+from pathlib import Path
+
 from django import forms
 from django.contrib import admin
-from django.http import HttpResponseRedirect
-from django.urls import path
 from django.contrib import messages
+from django.shortcuts import redirect
+from django.conf import settings
+from django.urls import path
 
 from .models import User, Interest, University, City, FieldOfStudy
-import requests
+
+logger = logging.getLogger(__name__)
+
+DATA_DIR = Path(settings.BASE_DIR) / "data"
+
+
+def read_data_file(file_name: str):
+    """Reads a file and returns a list of its contents, handling errors safely."""
+    file_path = DATA_DIR / file_name
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
+        return lines
+    except Exception as e:
+        logger.error(
+            f"Failed to read {file_path}: {e}",
+            traceback.format_exc(),
+            exc_info=True)
+        raise e
 
 
 class UserAdminForm(forms.ModelForm):
@@ -86,91 +109,111 @@ class UserAdmin(admin.ModelAdmin):
     reject_users.short_description = "Reject selected users"
 
 
-@admin.register(Interest)
-class InterestAdmin(admin.ModelAdmin):
+class DataUpdateAdmin(admin.ModelAdmin):
+    """
+    A reusable base admin class that:
+      - Defines a custom URL for "update" actions.
+      - Calls a read_data_file(file_name) helper to load lines from disk.
+      - Creates or updates objects in a model.
+      - Has a custom change_list_template with an "Update <something>" button.
+    """
+    # These class attributes should be overridden in subclasses:
+    file_name = None  # e.g. "cities.txt"
+    model_cls = None  # e.g. City
+    update_url_name = None  # e.g. "update-cities"
+    update_button_name = None  # e.g. "Update cities"
+
+    change_list_template = "admin/api/update_list.html"
+
+    def get_urls(self):
+        """
+        Add a custom URL that maps to the 'update_view' method.
+        """
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                f"{self.update_url_name}/",  # e.g. "update-cities/"
+                self.admin_site.admin_view(self.update_view),
+                name=self.update_url_name
+            ),
+        ]
+        return my_urls + urls
+
+    def changelist_view(self, request, extra_context=None):
+        """
+        Override to pass variables into the template for the link.
+        """
+        extra_context = extra_context or {}
+        # The template uses these for the button:
+        extra_context["variable_for_url"] = f"admin:{self.update_url_name}"
+        extra_context["button_name"] = self.update_button_name
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def update_view(self, request):
+        """
+        Generic "update" view that reads the file, creates objects, etc.
+        """
+        if not self.file_name or not self.model_cls:
+            messages.error(request, "This admin is not properly configured.")
+            return redirect("..")
+
+        try:
+            lines = read_data_file(self.file_name)
+            count = 0
+            for line in lines:
+                _, created = self.model_cls.objects.get_or_create(name=line)
+                if created:
+                    count += 1
+
+            messages.success(
+                request,
+                f"Successfully updated {len(lines)} lines. ({count} new {self.model_cls.__name__} objects created.)"
+            )
+        except Exception as e:
+            short_error = str(e)[:100]
+            messages.error(
+                request,
+                f"Error while updating {self.update_button_name}: {short_error}"
+            )
+
+        return redirect("..")
+
+
+@admin.register(City)
+class CityAdmin(DataUpdateAdmin):
+    file_name = "cities.txt"
+    model_cls = City
+    update_url_name = "update-cities"
+    update_button_name = "Update cities"
     list_display = ("id", "name")
     search_fields = ("name",)
 
 
 @admin.register(University)
-class UniversityAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name')
-    search_fields = ('name',)
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('update-universities/', self.admin_site.admin_view(self.update_universities),
-                 name='update-universities'),
-        ]
-        return custom_urls + urls
-
-    def update_universities(self, request):
-        """Univirsity update method with API of gov il"""
-        url = 'https://data.gov.il/api/3/action/datastore_search?resource_id=1c53badd-f3e3-47c8-b89d-6024ef2e84d3&limit=1000'
-        response = requests.get(url)
-
-        if response.status_code != 200:
-            self.message_user(request, f'Bad request to API: {response.status_code}', level=messages.ERROR)
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        data = response.json()
-        if 'result' not in data or 'records' not in data['result']:
-            self.message_user(request, 'Wrong data format from API', level=messages.ERROR)
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        for record in data['result']['records']:
-            if 'NAME' not in record:
-                self.message_user(request, 'Wrong data format from API', level=messages.ERROR)
-                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-            university, created = University.objects.update_or_create(
-                name=record['NAME']
-            )
-
-        self.message_user(request, 'University list was updated!', level=messages.SUCCESS)
-        return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+class UniversityAdmin(DataUpdateAdmin):
+    file_name = "universities.txt"
+    model_cls = University
+    update_url_name = "update-universities"
+    update_button_name = "Update universities"
+    list_display = ("id", "name")
+    search_fields = ("name",)
 
 
-@admin.register(City)
-class CityAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name')
-    search_fields = ('name',)
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('update-cities/', self.admin_site.admin_view(self.update_cities),
-                 name='update-cities'),
-        ]
-        return custom_urls + urls
-
-    def update_cities(self, request):
-        """University update method with API of gov il"""
-        url = 'https://data.gov.il/api/3/action/datastore_search?resource_id=8f714b6f-c35c-4b40-a0e7-547b675eee0e&limit=1300'
-        response = requests.get(url)
-
-        if response.status_code != 200:
-            self.message_user(request, f'Bad request to API: {response.status_code}', level=messages.ERROR)
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        data = response.json()
-        if 'result' not in data or 'records' not in data['result']:
-            self.message_user(request, 'Wrong data format from API', level=messages.ERROR)
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-
-        for record in data['result']['records']:
-            if 'city_name_en' not in record:
-                self.message_user(request, 'Wrong data format from API', level=messages.ERROR)
-                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-            city, created = City.objects.update_or_create(
-                name=record['city_name_en']
-            )
-
-        self.message_user(request, 'City list was updated!', level=messages.SUCCESS)
-        return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+@admin.register(Interest)
+class InterestAdmin(DataUpdateAdmin):
+    file_name = "interests.txt"
+    model_cls = Interest
+    update_url_name = "update-interests"
+    update_button_name = "Update interests"
+    list_display = ("id", "name")
+    search_fields = ("name",)
 
 
 @admin.register(FieldOfStudy)
-class FieldOfStudyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name')
-    search_fields = ('name',)
+class FieldOfStudyAdmin(DataUpdateAdmin):
+    file_name = "fields_of_study.txt"
+    model_cls = FieldOfStudy
+    update_url_name = "update-fields-of-study"
+    update_button_name = "Update fields of study"
+    list_display = ("id", "name")
+    search_fields = ("name",)

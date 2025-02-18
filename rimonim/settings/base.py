@@ -25,9 +25,9 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "default_secret_key")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "http://localhost").split(",")
 
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost").split(",")
 
 # Application definition
 
@@ -206,8 +206,8 @@ LOGGING = {
 
 CORS_ALLOWED_ORIGINS = [
     "https://app.rimonim.me",
-    "http://app.rimonim.me", 
-    "http://localhost:4200", 
+    "http://app.rimonim.me",
+    "http://localhost:4200",
     "http://localhost",
 ]
 CORS_ALLOW_CREDENTIALS = True
