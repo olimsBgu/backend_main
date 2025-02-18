@@ -108,6 +108,7 @@ class UserListSchema(Schema):
 
 class ImageUploadResponseSchema(Schema):
     message: str
+    image_url: str
 
 
 class RequestApprovalSchema(Schema):
