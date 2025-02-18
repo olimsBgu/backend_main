@@ -1,8 +1,8 @@
 {% extends "admin/change_list.html" %}
 
 {% block object-tools-items %}
-        <li>
-            <a href="{% url 'admin:update-cities' %}">Update cities</a>
-        </li>
+    <li>
+        <a href="{% url variable_for_url %}">{{ button_name }}</a>
+    </li>
     {{ block.super }}
 {% endblock %}

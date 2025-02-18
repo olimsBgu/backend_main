@@ -27,4 +27,10 @@ COPY . /app/
 EXPOSE 8000
 
 # Default command to run the app
-CMD ["/wait-for-it.sh", "db:5432", "--", "sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 --timeout 120 rimonim.wsgi:application"]
+CMD ["/wait-for-it.sh", "db:5432", "--", "sh", "-c", " \
+    if [ \"$ENV\" = \"dev\" ]; then \
+        python manage.py runserver 0.0.0.0:8000; \
+    else \
+        python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 --timeout 120 rimonim.wsgi:application; \
+    fi \
+"]
