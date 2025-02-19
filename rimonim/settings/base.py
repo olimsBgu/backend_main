@@ -209,6 +209,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://app.rimonim.me",
     "http://localhost:4200",
     "http://localhost",
+    "https://localhost:4200",
+    "https://localhost",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
