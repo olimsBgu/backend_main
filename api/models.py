@@ -1,11 +1,65 @@
+import os
 import uuid
+from datetime import timedelta
 
+from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from datetime import timedelta
-from django.contrib.auth.hashers import make_password, check_password
+
+default_storage = FileSystemStorage()
+
+
+def user_directory_path(instance, filename):
+    """
+    Construct the upload path: user_<public_id>/images/<unique_filename>.<ext>
+    """
+    extension = os.path.splitext(filename)[1].lower()
+    unique_name = f"{uuid.uuid4().hex}{extension}"
+    return f"user_{instance.user.public_id}/images/{unique_name}"
+
+
+
+class Interest(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        verbose_name_plural = "Interests"
+
+    def __str__(self):
+        return self.name
+
+
+class University(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        verbose_name_plural = "Universities"
+
+    def __str__(self):
+        return self.name
+
+
+class City(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        verbose_name_plural = "Cities"
+
+    def __str__(self):
+        return self.name
+
+
+class FieldOfStudy(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        verbose_name_plural = "Fields of Study"
+
+    def __str__(self):
+        return self.name
 
 
 class UserManager(BaseUserManager):
@@ -31,6 +85,23 @@ class UserManager(BaseUserManager):
         return user
 
 
+class Image(models.Model):
+    user = models.ForeignKey(
+        "api.User",
+        on_delete=models.CASCADE,
+        related_name="images",
+        verbose_name="Owner of the image",
+    )
+    file = models.ImageField(
+        upload_to=user_directory_path,
+        blank=False,
+    )
+    uploaded_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Image {self.id} for user {self.user.email}"
+
+
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = [
         ('admin', 'Admin'),
@@ -45,14 +116,34 @@ class User(AbstractBaseUser, PermissionsMixin):
     personal_id = models.CharField(max_length=50)
     user_type = models.CharField(max_length=50, choices=[('repatriate', 'Repatriate'), ('mentor', 'Mentor')])
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
+
     approved = models.BooleanField(default=False)
     active = models.BooleanField(default=False)
-    images = models.JSONField(default=list, blank=True)
+
     birthdate = models.DateField(blank=True, null=True)
-    city = models.CharField(max_length=100)
-    university = models.CharField(max_length=100)
-    field_of_study = models.CharField(max_length=100)
-    interests = models.JSONField(default=list, blank=True)
+
+    # Now each user references a City, University, FieldOfStudy by ID
+    city = models.ForeignKey(
+        City, null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="users",
+    )
+    university = models.ForeignKey(
+        University, null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="users",
+    )
+    field_of_study = models.ForeignKey(
+        FieldOfStudy, null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="users",
+    )
+
+    # Many-to-many to Interest
+    interests = models.ManyToManyField(
+        Interest, blank=True, related_name="users"
+    )
+
     description = models.TextField(blank=True)
     partner = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='partners')
     date_joined = models.DateTimeField(default=timezone.now)
@@ -60,6 +151,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     login_code_expires_at = models.DateTimeField(null=True, blank=True)
     is_staff = models.BooleanField(default=False)
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
     groups = models.ManyToManyField(
         "auth.Group",
         related_name="api_users",
@@ -88,7 +180,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         return check_password(code, self.hashed_login_code)
 
     def is_login_code_valid(self) -> bool:
-        return timezone.now() <= self.login_code_expires_at
+        return timezone.now() <= self.login_code_expires_at if self.login_code_expires_at else False
 
     def get_short_name(self):
         """Return the user's short name."""
@@ -104,30 +196,3 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         app_label = 'api'
 
-
-class Interest(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-
-    def __str__(self):
-        return self.name
-
-
-class University(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-
-    def __str__(self):
-        return self.name
-
-
-class City(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-
-    def __str__(self):
-        return self.name
-
-
-class FieldOfStudy(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-
-    def __str__(self):
-        return self.name
