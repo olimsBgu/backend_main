@@ -1,10 +1,11 @@
 import re
-import uuid
 from datetime import date
 from typing import Optional, List
 
-from ninja import Schema
+from ninja import ModelSchema, Schema, Field
 from pydantic import EmailStr, constr, validator
+
+from api.models import User
 
 
 def validate_letters(value, field_name: str):
@@ -30,21 +31,51 @@ class LogoutSchema(Schema):
     refresh: str
 
 
-class ProfileSchema(Schema):
-    name: str
-    surname: str
-    phone: Optional[str]
-    email: str
-    approved: bool
-    active: bool
-    images: List[str]
-    birthdate: Optional[date]
-    city: str
-    university: str
-    field_of_study: str
-    interests: List[str]
-    description: str
-    partner: Optional[int]
+class UserProfileSchema(ModelSchema):
+    """
+    For a user's detailed profile, including images,
+    plus references to city/university/field_of_study by name or ID.
+    """
+    images: dict[int, str] = Field(default_factory=dict)
+
+    city: Optional[str] = None
+    university: Optional[str] = None
+    field_of_study: Optional[str] = None
+    interests: dict[int, str] = Field(default_factory=dict)
+    partner: Optional[int] = None
+
+    class Config:
+        model = User
+        model_fields = [
+            "name", "surname", "phone", "email",
+            "approved", "active", "birthdate",
+            "city", "university", "field_of_study",
+            "description", "partner", "user_type"
+        ]
+
+    @staticmethod
+    def resolve_images(obj: User) -> dict[int, str]:
+        return {img.id: img.file.url for img in obj.images.all()}
+
+    @staticmethod
+    def resolve_city(obj: User) -> Optional[str]:
+        return obj.city.name if obj.city else None
+
+    @staticmethod
+    def resolve_university(obj: User) -> Optional[str]:
+        return obj.university.name if obj.university else None
+
+    @staticmethod
+    def resolve_field_of_study(obj: User) -> Optional[str]:
+        return obj.field_of_study.name if obj.field_of_study else None
+
+    @staticmethod
+    def resolve_interests(obj: User) -> dict[int, str]:
+        return {i.id: i.name for i in obj.interests.all()}
+
+    @staticmethod
+    def resolve_partner(obj: User) -> Optional[int]:
+        return obj.partner.id if obj.partner else None
 
 
 class UpdateProfileSchema(Schema):
@@ -52,11 +83,12 @@ class UpdateProfileSchema(Schema):
     surname: Optional[constr(min_length=2, max_length=50)] = None
     phone: Optional[str] = None
     birthdate: Optional[date] = None
-    city: Optional[constr(min_length=2, max_length=100)] = None
-    university: Optional[str] = None
-    field_of_study: Optional[str] = None
-    interests: Optional[List[str]] = None
+    city: Optional[int] = None
+    university: Optional[int] = None
+    field_of_study: Optional[int] = None
+    interests: Optional[List[int]] = None
     description: Optional[str] = None
+    user_type: Optional[str] = None
 
     # Additional validators
     @validator('name')  # Name validation
@@ -82,33 +114,59 @@ class UpdateProfileSchema(Schema):
             raise ValueError('The birthdate is too old.')
         return value
 
-    @validator('city')  # City validation
-    def validate_city(cls, value):
-        return validate_letters(value, 'City')
 
-    @validator('interests', each_item=True)  # Interests validation
-    def validate_interest(cls, value):
-        return validate_letters(value, 'Interests')
+class SimpleUserSchema(ModelSchema):
+    """
+    A "simple" schema with fewer fields, e.g., used for user lists / "potential pairs".
+    """
+    images: dict[int, str] = Field(default_factory=dict)
 
+    city: Optional[str] = None
+    university: Optional[str] = None
+    field_of_study: Optional[str] = None
+    interests: dict[int, str] = Field(default_factory=dict)
+    partner: Optional[int] = None
 
-class SimpleUserSchema(Schema):
-    public_id: uuid.UUID
-    name: str
-    surname: str
-    city: str
-    user_type: str
-    description: str
-    interests: List[str]
-    images: List[str]
+    class Config:
+        model = User
+        model_fields = [
+            "public_id", "name", "surname", "city", "university", "field_of_study", "user_type",
+            "description", "interests"
+        ]
+
+    @staticmethod
+    def resolve_images(obj: User) -> dict[int, str]:
+        return {img.id: img.file.url for img in obj.images.all()}
+
+    @staticmethod
+    def resolve_city(obj: User) -> Optional[str]:
+        return obj.city.name if obj.city else None
+
+    @staticmethod
+    def resolve_university(obj: User) -> Optional[str]:
+        return obj.university.name if obj.university else None
+
+    @staticmethod
+    def resolve_field_of_study(obj: User) -> Optional[str]:
+        return obj.field_of_study.name if obj.field_of_study else None
+
+    @staticmethod
+    def resolve_interests(obj: User) -> dict[int, str]:
+        return {i.id: i.name for i in obj.interests.all()}
 
 
 class UserListSchema(Schema):
     users: List[SimpleUserSchema]
 
 
-class ImageUploadResponseSchema(Schema):
+class ImageResponseSchema(Schema):
     message: str
+    image_id: int
     image_url: str
+
+
+class MessageSchema(Schema):
+    message: str
 
 
 class RequestApprovalSchema(Schema):

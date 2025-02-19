@@ -10,3 +10,4 @@ pytest-mock
 pydantic[email]
 requests
 django-cors-headers
+pillow

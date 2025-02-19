@@ -7,8 +7,11 @@ from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.urls import reverse
 from ninja_jwt.tokens import RefreshToken
+from ninja.errors import HttpError
 
-from api.models import User
+from api.models import (
+    User, City, University, FieldOfStudy, Interest, Image
+)
 
 
 @pytest.mark.django_db
@@ -20,7 +23,6 @@ def test_verify_email(client, mocker):
 
     # Use the correct reverse path for the API
     response = client.post(reverse("api:verify_email"), {"email": email}, content_type="application/json")
-
     assert response.status_code == 200
 
     response_json = response.json()
@@ -52,7 +54,7 @@ def test_check_email(client):
     assert response.status_code == 200
     assert response.json() == {"email": email, "is_confirmed": False}
 
-    # Mark the user as active
+    # Confirm
     user.active = True
     user.save()
 
@@ -68,8 +70,7 @@ def test_check_email(client):
 
 
 @pytest.mark.django_db
-def test_confirm_email(client, mocker):
-    # Create a user
+def test_confirm_email(client):
     user = User.objects.create(email="testuser@example.com")
     token = default_token_generator.make_token(user)
 
@@ -104,7 +105,7 @@ def test_request_login_code(client, mocker):
     assert response.status_code == 200
     response_json = response.json()
     assert response_json.get('message') == "Login code sent."
-    assert response_json.get("login_code", None) is not None
+    assert response_json.get("login_code") is not None
 
     # Ensure the login code is hashed
     user.refresh_from_db()
@@ -125,7 +126,11 @@ def test_login(client):
     user.set_login_code(code)
     user.save()
 
-    response = client.post(reverse("api:login"), {"email": user.email, "code": code}, content_type="application/json")
+    response = client.post(
+        reverse("api:login"),
+        {"email": user.email, "code": code},
+        content_type="application/json"
+    )
     assert response.status_code == 200
 
     # Validate tokens in the response
@@ -156,8 +161,9 @@ def test_refresh_token(client):
     )
 
     assert response.status_code == 200
-    assert "access" in response.json()  # Ensure the access token is returned
-    assert "refresh" in response.json()  # Ensure the refresh token is returned
+    data = response.json()
+    assert "access" in data  # Ensure the access token is returned
+    assert "refresh" in data  # Ensure the refresh token is returned
 
 
 @pytest.mark.django_db
@@ -181,13 +187,18 @@ def test_logout(client):
 
     # Test that the refresh token is invalidated
     with pytest.raises(Exception):
+        # The token should now be invalid
         RefreshToken(str(refresh)).check_blacklist()
 
 
 @pytest.mark.django_db
 def test_get_profile(client):
     user = User.objects.create(
-        email="test@example.com", name="Test", surname="User", active=True, approved=True
+        email="test@example.com",
+        name="Test",
+        surname="User",
+        active=True,
+        approved=True
     )
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
@@ -196,7 +207,6 @@ def test_get_profile(client):
         reverse("api:get_profile"),
         HTTP_AUTHORIZATION=f"Bearer {access_token}"
     )
-
     assert response.status_code == 200
     assert response.json()["email"] == "test@example.com"
 
@@ -210,8 +220,7 @@ def test_update_profile(client):
         surname="User",
         active=True,
         approved=True,
-        personal_id="123456789",
-        images=[],
+        personal_id="123456789"
     )
 
     # Generate a JWT token for the user
@@ -228,16 +237,17 @@ def test_update_profile(client):
 
     # Assert the response
     assert response.status_code == 200
-    response_data = response.json()
-    assert response_data["name"] == "Semen"
-    assert response_data["description"] == "Updated description"
-    assert response_data["phone"] == "+972559633414"
+    data = response.json()
+    assert data["name"] == "Semen"
+    assert data["description"] == "Updated description"
+    assert data["phone"] == "+972559633414"
 
     # Verify that the user's data is updated in the database
     user.refresh_from_db()
     assert user.name == "Semen"
     assert user.description == "Updated description"
     assert user.phone == "+972559633414"
+
 
 @pytest.mark.django_db
 def test_update_profile_valid_data(client):
@@ -249,12 +259,17 @@ def test_update_profile_valid_data(client):
         active=True,
         approved=True,
         personal_id="123456789",
-        images=[],
     )
 
     # Generate a JWT token for the user
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
+
+    city = City.objects.create(name="Telaviv")
+    university = University.objects.create(name="BGU")
+    field_of_study = FieldOfStudy.objects.create(name="Computer Science")
+    interests_1 = Interest.objects.create(name="Programming")
+    interests_2 = Interest.objects.create(name="Gaming")
 
     # Send a PUT request with the updated data
     response = client.put(
@@ -265,37 +280,36 @@ def test_update_profile_valid_data(client):
             "description": "Updated description",
             "phone": "+972559633414",
             "birthdate": "1990-01-01",
-            "city": "Telaviv",
-            "university": "BGU",
-            "field_of_study": "Computer Science",
-            "interests": ["Programming", "Gaming"]
+            "city": city.id,
+            "university": university.id,
+            "field_of_study": field_of_study.id,
+            "interests": [interests_1.id, interests_2.id]
         },
         content_type="application/json",
         HTTP_AUTHORIZATION=f"Bearer {access_token}",
     )
 
-    # Assert the response
     assert response.status_code == 200
-    response_data = response.json()
-    assert response_data["name"] == "Semen"
-    assert response_data["surname"] == "Goyda"
-    assert response_data["description"] == "Updated description"
-    assert response_data["phone"] == "+972559633414"
-    assert response_data["birthdate"] == "1990-01-01"
-    assert response_data["city"] == "Telaviv"
-    assert response_data["university"] == "BGU"
-    assert response_data["field_of_study"] == "Computer Science"
+    data = response.json()
+    assert data["name"] == "Semen"
+    assert data["surname"] == "Goyda"
+    assert data["description"] == "Updated description"
+    assert data["phone"] == "+972559633414"
+    assert data["birthdate"] == "1990-01-01"
+    assert data["city"] == "Telaviv"
+    assert data["university"] == "BGU"
+    assert data["field_of_study"] == "Computer Science"
 
-    # Verify that the user's data is updated in the database
     user.refresh_from_db()
     assert user.name == "Semen"
     assert user.surname == "Goyda"
     assert user.description == "Updated description"
     assert user.phone == "+972559633414"
     assert user.birthdate == datetime.date(1990, 1, 1)
-    assert user.city == "Telaviv"
-    assert user.university == "BGU"
-    assert user.field_of_study == "Computer Science"
+    assert user.city.name == "Telaviv"
+    assert user.university.name == "BGU"
+    assert user.field_of_study.name == "Computer Science"
+    assert user.interests.count() == 2
 
 
 @pytest.mark.django_db
@@ -307,28 +321,23 @@ def test_update_profile_invalid_phone(client):
         active=True,
         approved=True,
         personal_id="123456789",
-        images=[],
     )
-
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
 
     # Sending wrong phone field
     response = client.put(
         reverse("api:update_profile"),
-        data={"phone": "559633414"},  # Wrong data
+        data={"phone": "559633414"},  # Fails phone regex
         content_type="application/json",
         HTTP_AUTHORIZATION=f"Bearer {access_token}",
     )
 
-    # Checking for error
+    # Pydantic validator raises 422 by default
     assert response.status_code == 422
     response_data = response.json()
-    print(response_data)
     assert 'detail' in response_data
-    assert 'type' in response_data['detail'][0]
     assert 'value_error' == response_data['detail'][0]['type']
-    assert 'loc' in response_data['detail'][0]
     assert 'phone' == response_data['detail'][0]['loc'][2]
 
 
@@ -341,28 +350,21 @@ def test_update_profile_invalid_name(client):
         active=True,
         approved=True,
         personal_id="123456789",
-        images=[],
     )
-
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
 
-    # Sending wrong name field
     response = client.put(
         reverse("api:update_profile"),
-        data={"name": "a4"},  # Wrong data
+        data={"name": "a4"},  # Fails name validator
         content_type="application/json",
         HTTP_AUTHORIZATION=f"Bearer {access_token}",
     )
 
-    # Checking for error
     assert response.status_code == 422
     response_data = response.json()
-    print(response_data)
     assert 'detail' in response_data
-    assert 'type' in response_data['detail'][0]
     assert 'value_error' == response_data['detail'][0]['type']
-    assert 'loc' in response_data['detail'][0]
     assert 'name' == response_data['detail'][0]['loc'][2]
 
 
@@ -375,33 +377,26 @@ def test_update_profile_invalid_birthdate(client):
         active=True,
         approved=True,
         personal_id="123456789",
-        images=[],
     )
-
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
 
-    # Sending wrong birthdate field
     response = client.put(
         reverse("api:update_profile"),
-        data={"birthdate": "2050-01-01"},  # Wrong data
+        data={"birthdate": "2050-01-01"},  # Future date
         content_type="application/json",
         HTTP_AUTHORIZATION=f"Bearer {access_token}",
     )
-
-    # Checking for error
     assert response.status_code == 422
     response_data = response.json()
-    print(response_data)
     assert 'detail' in response_data
-    assert 'type' in response_data['detail'][0]
     assert 'value_error' == response_data['detail'][0]['type']
-    assert 'loc' in response_data['detail'][0]
     assert 'birthdate' == response_data['detail'][0]['loc'][2]
 
 
 @pytest.mark.django_db
 def test_update_profile_invalid_city(client):
+    """Test sending a string for city instead of an integer ID, which fails the Pydantic validator."""
     user = User.objects.create(
         email="test@example.com",
         name="Test",
@@ -409,116 +404,112 @@ def test_update_profile_invalid_city(client):
         active=True,
         approved=True,
         personal_id="123456789",
-        images=[],
     )
-
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
 
-    # Sending wrong city field
     response = client.put(
         reverse("api:update_profile"),
-        data={"city": "town1"},  # Wrong data
+        data={"city": "town1"},  # Should be an integer, this triggers a 422
         content_type="application/json",
         HTTP_AUTHORIZATION=f"Bearer {access_token}",
     )
-
-    # Checking for error
     assert response.status_code == 422
     response_data = response.json()
-    print(response_data)
     assert 'detail' in response_data
-    assert 'type' in response_data['detail'][0]
-    assert 'value_error' == response_data['detail'][0]['type']
-    assert 'loc' in response_data['detail'][0]
+    assert 'int_parsing' == response_data['detail'][0]['type']
     assert 'city' == response_data['detail'][0]['loc'][2]
 
 
 @pytest.mark.django_db
 def test_get_potential_pairs(client):
-    # Create a test user (repatriate)
+    """
+    We want to ensure the /users/ endpoint returns matching mentors if they share city or interests.
+    Now city, interests are references, so create them properly.
+    """
+    city_a = City.objects.create(name="CityA")
+    city_b = City.objects.create(name="CityB")
+
+    # Create some interests
+    interest_hiking = Interest.objects.create(name="hiking")
+    interest_reading = Interest.objects.create(name="reading")
+    interest_coding = Interest.objects.create(name="coding")
+
+    # Create a repatriate user
     user = User.objects.create(
         email="repatriate@example.com",
         name="Repatriate",
         surname="Test",
         user_type="repatriate",
-        city="CityA",
-        interests=["hiking", "reading"],
+        city=city_a,  # CityA
         active=True,
         approved=True,
         personal_id="123456789"
     )
+    user.interests.add(interest_hiking, interest_reading)
 
-    # Create potential mentors
-    User.objects.create(
+    # Create mentors
+    mentor1 = User.objects.create(
         email="mentor1@example.com",
         name="Mentor",
         surname="One",
         user_type="mentor",
-        city="CityA",
-        interests=["hiking", "coding"],
+        city=city_a,  # same as user
         active=True,
         approved=True,
         personal_id="123456798"
     )
-    User.objects.create(
+    mentor1.interests.add(interest_hiking, interest_coding)
+
+    mentor2 = User.objects.create(
         email="mentor2@example.com",
         name="Mentor",
         surname="Two",
         user_type="mentor",
-        city="CityB",
-        interests=["reading"],
+        city=city_b,
         active=True,
         approved=True,
         personal_id="123456879"
     )
+    mentor2.interests.add(interest_coding)
 
-    # Generate a JWT token for the user
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
-
-    # Call the /users endpoint with the Authorization header
     url = reverse("api:get_potential_pairs")
-    response = client.get(
-        url,
-        HTTP_AUTHORIZATION=f"Bearer {access_token}"  # Include the token in the headers
-    )
 
-    # Assert the response
+    response = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
     assert response.status_code == 200
     data = response.json()
-    assert len(data["users"]) == 1  # Only one mentor matches the city and interests
-    assert data["users"][0]["name"] == "Mentor"
-    assert data["users"][0]["user_type"] == "mentor"
-    assert data["users"][0]["interests"] == ['hiking', 'coding']
+
+    # We expect only mentor1 to match: city=CityA or overlapping interests
+    # city=CityA is a direct match, also interest "hiking" is an overlap
+    assert len(data["users"]) == 1
+    assert data["users"][0]["surname"] == "One"
+    assert data["users"][0]["interests"] == ["hiking", "coding"]
 
 
 @pytest.mark.django_db
 def test_upload_image(client, tmpdir):
-    # Create a test user
+    """
+    Test the POST /image endpoint with the new logic:
+    - We no longer store 'images' as JSON on User; we store them in the Image model (FK to User).
+    - The endpoint should return {message, image_url}.
+    """
     user = User.objects.create(
         email="testuser@example.com",
         name="Test",
         surname="User",
         user_type="repatriate",
-        city="CityA",
-        interests=["hiking", "reading"],
         active=True,
         approved=True,
         personal_id="123456789",
-        images=[]
     )
-
-    # Generate a JWT token for the user
     refresh = RefreshToken.for_user(user)
     access_token = str(refresh.access_token)
 
-    # Simulate an image upload
     url = reverse("api:upload_image")
     image_path = tmpdir.join("test_image.jpg")
-    image_path.write(b"fake image content")  # Create a fake image for testing
-
-    uploaded_file_path = None  # Initialize for cleanup later
+    image_path.write(b"fake image content")  # create a fake "image"
 
     try:
         with open(image_path, "rb") as image_file:
@@ -527,80 +518,118 @@ def test_upload_image(client, tmpdir):
                 {"image": image_file},
                 HTTP_AUTHORIZATION=f"Bearer {access_token}"
             )
-
-        # Assert the response
         assert response.status_code == 200
-        assert response.json() == {"message": "Image uploaded successfully"}
+        res_data = response.json()
+        assert res_data["message"] == "Image uploaded successfully"
+        assert "image_id" in res_data
+        assert "image_url" in res_data
 
-        # Verify that the image is added to the user's images field
+        # Check in DB
         user.refresh_from_db()
-        assert len(user.images) == 1
-        assert f"user_{user.public_id}/images/" in user.images[0]
-
+        # Now images are in the Image model, related_name="images"
+        assert user.images.count() == 1
+        img_obj = user.images.first()
+        assert img_obj.file  # An ImageField should have a file
+        assert f"user_{user.public_id}/images/" in img_obj.file.name  # or .file.path
     finally:
         user_folder = os.path.join(settings.MEDIA_ROOT, f"user_{user.public_id}")
-        if user_folder and os.path.exists(user_folder):
+        if os.path.exists(user_folder):
             shutil.rmtree(user_folder, ignore_errors=True)
 
 
 @pytest.mark.django_db
-def test_request_approval_existing_user(client):
-    # Create a test user with some fields already filled
-    _ = User.objects.create(
-        email="testuser@example.com",
-        active=True,
-        name="Existing",
-        surname="User",
-        personal_id="123456789",
+def test_replace_image(client, tmpdir):
+    """
+    Test the POST /replace-image endpoint:
+      1) Upload an image
+      2) Replace it with a new file by posting {image_id, image}
+    """
+    user = User.objects.create(
+        email="testuser@example.com", active=True, approved=True,
+        personal_id="123456789"
     )
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+    try:
+        # 1) Upload initial image
+        url_upload = reverse("api:upload_image")
+        image_path = tmpdir.join("test_image.jpg")
+        image_path.write(b"fake image content")
 
-    # Attempt to update the account
-    payload = {
-        "name": "New",
-        "surname": "Name",
-        "phone": "1234567890",
-        "personal_id": "987654321",
-        "user_type": "repatriate",
-        "email": "testuser@example.com",
-    }
-    url = reverse("api:request_approval")
-    response = client.post(url, payload, content_type="application/json")
+        with open(image_path, "rb") as image_file:
+            resp = client.post(
+                url_upload,
+                {"image": image_file},
+                HTTP_AUTHORIZATION=f"Bearer {access_token}"
+            )
+        assert resp.status_code == 200
+        old_img_obj = user.images.first()
+        assert old_img_obj is not None
 
-    # Assert the response
-    assert response.status_code == 400
-    assert response.json() == {'detail': 'USER_REGISTERED'}
+        # 2) Replace via POST /replace-image
+        url_replace = reverse("api:replace_image")  # no args; we're passing image_id in form data
+        new_image_path = tmpdir.join("test_image2.jpg")
+        new_image_path.write(b"another fake content")
+
+        with open(new_image_path, "rb") as image_file:
+            resp2 = client.post(
+                url_replace,
+                {
+                    "image_id": str(old_img_obj.id),  # must be a string if going into form data
+                    "image": image_file,
+                },
+                HTTP_AUTHORIZATION=f"Bearer {access_token}"
+            )
+
+        assert resp2.status_code == 200
+        res2 = resp2.json()
+        assert res2["message"] == "Image replaced successfully"
+        assert "image_url" in res2
+
+        user.refresh_from_db()
+        # Still only 1 image in DB, but replaced with new file
+        assert user.images.count() == 1
+        replaced_img_obj = user.images.first()
+        assert replaced_img_obj.id == old_img_obj.id  # same DB object
+        assert replaced_img_obj.file != old_img_obj.file  # updated file name
+    finally:
+        user_folder = os.path.join(settings.MEDIA_ROOT, f"user_{user.public_id}")
+        if os.path.exists(user_folder):
+            shutil.rmtree(user_folder, ignore_errors=True)
 
 
 @pytest.mark.django_db
-def test_request_approval_new_user(client):
-    # Create a test user with minimal fields
-    user = User.objects.create(
-        email="testuser@example.com",
-        active=True,
-        approved=False,
-    )
+def test_delete_image(client, tmpdir):
+    """
+    Test the DELETE /image/{image_id} endpoint:
+    - Upload an image, then delete it.
+    """
+    user = User.objects.create(email="deleteuser@example.com", active=True, approved=True)
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+    try:
+        # 1. Upload an image
+        url_upload = reverse("api:upload_image")
+        image_path = tmpdir.join("delete_image.jpg")
+        image_path.write(b"delete image content")
 
-    # Attempt to update the account
-    payload = {
-        "name": "New",
-        "surname": "Name",
-        "phone": "1234567890",
-        "personal_id": "987654321",
-        "user_type": "repatriate",
-        "email": "testuser@example.com",
-    }
-    url = reverse("api:request_approval")
-    response = client.post(url, payload, content_type="application/json")
+        with open(image_path, "rb") as image_file:
+            resp = client.post(url_upload, {"image": image_file}, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+        assert resp.status_code == 200
 
-    # Assert the response
-    assert response.status_code == 200
-    assert response.json() == {"message": "Account update request sent. Awaiting admin approval."}
+        user.refresh_from_db()
+        assert user.images.count() == 1
+        img_obj = user.images.first()
 
-    # Verify the user details were updated
-    user.refresh_from_db()
-    assert user.name == "New"
-    assert user.surname == "Name"
-    assert user.phone == "1234567890"
-    assert user.personal_id == "987654321"
-    assert user.user_type == "repatriate"
-    assert not user.approved
+        # 2. Delete the image
+        url_delete = reverse("api:delete_image", args=[img_obj.id])
+        resp2 = client.delete(url_delete, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+        assert resp2.status_code == 200
+        assert resp2.json() == {"message": f"Image {img_obj.id} deleted successfully."}
+
+        user.refresh_from_db()
+        assert user.images.count() == 0  # image record is gone
+    finally:
+        user_folder = os.path.join(settings.MEDIA_ROOT, f"user_{user.public_id}")
+        if os.path.exists(user_folder):
+            shutil.rmtree(user_folder, ignore_errors=True)

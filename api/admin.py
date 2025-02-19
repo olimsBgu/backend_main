@@ -8,8 +8,9 @@ from django.contrib import messages
 from django.shortcuts import redirect
 from django.conf import settings
 from django.urls import path
+from django.utils.html import format_html
 
-from .models import User, Interest, University, City, FieldOfStudy
+from .models import User, Interest, University, City, FieldOfStudy, Image
 
 logger = logging.getLogger(__name__)
 
@@ -68,13 +69,31 @@ class UserAdminForm(forms.ModelForm):
         return instance
 
 
+class ImageInline(admin.TabularInline):
+    model = Image
+    extra = 1  # number of empty inlines
+    readonly_fields = ("preview",)
+    fields = ("preview", "file",)  # Show a small thumbnail and the file field
+
+    def preview(self, obj):
+        if obj.file:
+            return format_html(
+                '<img src="{}" style="max-height: 100px;" />', obj.file.url
+            )
+        return ""
+    preview.short_description = "Preview"
+
+
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     form = UserAdminForm
-    list_display = ('email', 'name', 'surname', 'role', 'active', 'approved')
-    list_filter = ('role', 'active', 'approved')
-    search_fields = ('email', 'name', 'surname', 'role')
+    list_display = ('email', 'name', 'surname', 'user_type', 'active', 'approved')
+    list_filter = ('user_type', 'active', 'approved')
+    search_fields = ('email', 'name', 'surname', 'user_type')
     actions = ['approve_users', 'reject_users']
+
+    # Add the inline:
+    inlines = [ImageInline]
 
     fieldsets = (
         (None, {
@@ -82,8 +101,8 @@ class UserAdmin(admin.ModelAdmin):
         }),
         ('Personal Information', {
             'fields': (
-                'phone', 'birthdate', 'city', 'university', 'field_of_study', 'interests', 'description', 'images',
-                'partner')
+                'phone', 'birthdate', 'city', 'university', 'field_of_study', 'interests', 'description',
+                'partner', 'user_type')
         }),
         ('Login Code', {
             'fields': ('raw_login_code', 'hashed_login_code'),

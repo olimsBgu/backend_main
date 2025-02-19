@@ -5,10 +5,11 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
+from django.core.files.base import ContentFile
 from django.core.mail import send_mail
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from ninja import Router, Query
+from ninja import Router, Query, Form
 from ninja import UploadedFile, File
 from ninja.errors import HttpError
 from ninja.security import HttpBearer
@@ -16,10 +17,12 @@ from ninja_jwt.authentication import JWTAuth
 from ninja_jwt.schema import TokenRefreshInputSchema, TokenRefreshOutputSchema
 from ninja_jwt.tokens import RefreshToken
 
-from .models import User, Interest, University, City, FieldOfStudy
-from .schemas import ProfileSchema, UpdateProfileSchema, UserListSchema, ImageUploadResponseSchema, \
-    RequestApprovalSchema
-from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, UniversitySchema, CitySchema, FieldOfStudySchema
+from .models import User, Interest, University, City, FieldOfStudy, Image
+from .schemas import UpdateProfileSchema, UserListSchema, ImageResponseSchema, \
+    RequestApprovalSchema, MessageSchema, UserProfileSchema
+from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, \
+    UniversitySchema, CitySchema, FieldOfStudySchema
+from .utilities.validators import validate_image_file
 
 
 # Security class for token-based authentication
@@ -38,7 +41,7 @@ def generate_login_code():
 router = Router()
 
 
-@router.post("/verify-email/")
+@router.post("/verify-email")
 def verify_email(request, payload: VerifyEmailSchema):
     email = payload.email
     # Create or fetch the user
@@ -47,7 +50,6 @@ def verify_email(request, payload: VerifyEmailSchema):
     )
     if user.active:
         raise HttpError(409, f"EMAIL_VERIFIED")
-
 
     # Generate email confirmation token
     token = default_token_generator.make_token(user)
@@ -64,7 +66,7 @@ def verify_email(request, payload: VerifyEmailSchema):
     return {"message": "Email verification sent.", "link": confirmation_link}
 
 
-@router.get("/check-email/", response=dict)
+@router.get("/check-email", response=dict)
 def check_email(request, query: VerifyEmailSchema = Query(...)):
     user = User.objects.filter(email=query.email).first()
     if user:
@@ -85,7 +87,7 @@ def confirm_email(request, user_id: int, token: str):
     return {"message": "Email confirmed successfully."}
 
 
-@router.post("/request-approval/")
+@router.post("/request-approval")
 def request_approval(request, payload: RequestApprovalSchema):
     """
     Endpoint for users to request account approval after confirming their email.
@@ -116,7 +118,7 @@ def request_approval(request, payload: RequestApprovalSchema):
     return {"message": "Account update request sent. Awaiting admin approval."}
 
 
-@router.post("/request-code/")
+@router.post("/request-code")
 def send_login_code(request, payload: RequestCodeSchema):
     email = payload.email
     user = get_object_or_404(User, email=email)
@@ -145,7 +147,7 @@ def send_login_code(request, payload: RequestCodeSchema):
     return {"message": "Login code sent.", "login_code": login_code}
 
 
-@router.post("/verify-code/")
+@router.post("/verify-code")
 def login(request, payload: VerifyCodeSchema):
     email = payload.email
     code = payload.code
@@ -169,7 +171,7 @@ def login(request, payload: VerifyCodeSchema):
     }
 
 
-@router.post("/refresh/", response=TokenRefreshOutputSchema)
+@router.post("/refresh", response=TokenRefreshOutputSchema)
 def refresh_token(request, payload: TokenRefreshInputSchema):
     """
     Refresh the access token using the refresh token.
@@ -185,7 +187,7 @@ def refresh_token(request, payload: TokenRefreshInputSchema):
         raise HttpError(400, f"CODE_INVALID")
 
 
-@router.post("/logout/")
+@router.post("/logout")
 def logout(request, payload: LogoutSchema):
     """
     Log out a user by blacklisting their refresh token.
@@ -199,27 +201,63 @@ def logout(request, payload: LogoutSchema):
         raise HttpError(400, f"LOGIN_FAILED")
 
 
-@router.get("/profile/", response=ProfileSchema, auth=JWTBearer())
+@router.get("/profile", response=UserProfileSchema, auth=JWTBearer())
 def get_profile(request):
-    """Return the authenticated user's profile."""
-    user = request.auth
-    return user
+    """
+    Return the authenticated user's profile, including images and partner ID, etc.
+    """
+    return request.auth  # Ninja will apply UserProfileSchema on this user instance
 
 
-@router.put("/profile/", response=ProfileSchema, auth=JWTBearer())
+@router.put("/profile", response=UserProfileSchema, auth=JWTBearer())
 def update_profile(request, payload: UpdateProfileSchema):
-    """Update the authenticated user's profile."""
+    """
+    Update the authenticated user's profile.
+
+    The request payload may contain:
+    - normal fields (name, surname, phone, birthdate, description, user_type)
+    - foreign key IDs for city, university, field_of_study
+    - a list of interest IDs for the interests M2M
+    """
     user = request.auth
+    data = payload.dict(exclude_unset=True)
 
-    # Update the allowed fields directly from the schema
-    for field, value in payload.dict(exclude_unset=True).items():
-        setattr(user, field, value)
+    # 1) Update "normal" fields
+    normal_fields = ["name", "surname", "phone", "birthdate", "description", "user_type"]
+    for field in normal_fields:
+        if field in data:
+            setattr(user, field, data[field])
+
+    # 2) Generic approach for foreign key fields
+    #    Each entry: field_name -> (ModelClass, error_message_if_null_or_zero)
+    FOREIGN_KEY_MAPPING = {
+        "city": (City, "City must exist in predefined list"),
+        "university": (University, "University must exist in predefined list"),
+        "field_of_study": (FieldOfStudy, "Field of study must exist in predefined list")
+    }
+
+    for field_name, (model_cls, error_msg) in FOREIGN_KEY_MAPPING.items():
+        if field_name in data:
+            fk_id = data[field_name]
+            if not fk_id or fk_id == 0:
+                raise HttpError(400, error_msg)
+            obj = get_object_or_404(model_cls, pk=fk_id)
+            setattr(user, field_name, obj)
+
+    # 3) Many-to-many: interests
+    if "interests" in data:
+        new_interest_ids = data["interests"] or []
+        valid_count = Interest.objects.filter(pk__in=new_interest_ids).count()
+        if valid_count != len(new_interest_ids):
+            raise HttpError(400, "One or more provided interest IDs do not exist.")
+
+        user.interests.set(new_interest_ids)
+
     user.save()
-
     return user
 
 
-@router.get("/users/", response=UserListSchema, auth=JWTBearer())
+@router.get("/users", response=UserListSchema, auth=JWTBearer())
 def get_potential_pairs(request):
     """Return a list of users with whom the authenticated user can form a pair."""
     user = request.auth
@@ -239,42 +277,94 @@ def get_potential_pairs(request):
             approved=True,  # Ensure the user is approved
         )
         .filter(
-            Q(city=user.city) | Q(interests__overlap=user.interests)
+            Q(city=user.city) | Q(interests__in=user.interests.all())
         )
         .exclude(id=user.id)  # Exclude the current user
         .distinct()
     )
 
-    return {"users": potential_pairs}
+    return {"users": list(potential_pairs)}
 
 
-@router.post("/image/", response=ImageUploadResponseSchema, auth=JWTAuth())
+@router.post("/image", response=ImageResponseSchema, auth=JWTAuth())
 def upload_image(request, image: UploadedFile = File(...)):
-    """Handle image uploads for the authenticated user."""
-    user = request.auth  # Get the authenticated user
+    """
+    Upload a new image for the authenticated user.
+    """
+    user = request.auth  # The authenticated user from your JWTAuth
 
-    # Generate a unique filename using UUID
-    extension = os.path.splitext(image.name)[1]  # Extract the file extension
-    filename = f"{uuid.uuid4().hex}{extension}"  # Generate a unique filename
-    user_directory = os.path.join(settings.MEDIA_ROOT, f"user_{user.public_id}/images")
-    full_path = os.path.join(user_directory, filename)
+    # Check max images
+    if user.images.count() >= settings.MAX_IMAGES_PER_USER:
+        raise HttpError(400, f"Cannot upload more than {settings.MAX_IMAGES_PER_USER} images.")
 
-    # Ensure the directory exists
-    os.makedirs(user_directory, exist_ok=True)
+    # Validate extension and size
+    try:
+        validate_image_file(image, max_size_mb=settings.MAX_IMAGE_SIZE)
+    except ValueError as e:
+        raise HttpError(400, str(e))
 
-    # Save the file
-    with open(full_path, "wb") as f:
-        for chunk in image.chunks():
-            f.write(chunk)
+    # Create the Image instance but don't save to DB yet
+    new_image = Image(user=user)
+    # We only need the *content* of the file + a filename
+    # (ImageField will handle saving to storage)
+    content = ContentFile(image.read())
+    filename = image.name
 
-    # Append the filename to the user's image list
-    if not user.images:
-        user.images = []
-    user.images.append(f"user_{user.public_id}/images/{filename}")
-    user.save()
+    # Save the file via Django's storage
+    new_image.file.save(filename, content, save=True)
 
-    return {"message": "Image uploaded successfully",
-            "image_url": f"{settings.MEDIA_URL}user_{user.public_id}/images/{filename}"}
+    # The "new_image.file.url" property is automatically created by Django storage
+    # e.g., /media/user_<public_id>/images/xxx.jpg
+    return {
+        "message": "Image uploaded successfully",
+        "image_id": new_image.id,
+        "image_url": new_image.file.url,
+    }
+
+
+@router.post("/replace-image", response=ImageResponseSchema, auth=JWTAuth())
+def replace_image(
+    request,
+    image_id: int = Form(...),
+    image: UploadedFile = File(...)
+):
+    """
+    Replace an existing image (by image_id) with a new file.
+    """
+    user = request.auth
+    user_image = get_object_or_404(Image, id=image_id, user=user)
+
+    # Validate the file
+    try:
+        validate_image_file(image, max_size_mb=settings.MAX_IMAGE_SIZE)
+    except ValueError as e:
+        raise HttpError(400, str(e))
+
+    # Remove old file from storage
+    if user_image.file and user_image.file.name:
+        user_image.file.delete(save=False)
+
+    # Save the new file content
+    content = ContentFile(image.read())
+    user_image.file.save(image.name, content, save=True)
+
+    return {
+        "message": "Image replaced successfully",
+        "image_id": user_image.id,
+        "image_url": user_image.file.url,
+    }
+
+
+@router.delete("/image/{image_id}", response=MessageSchema, auth=JWTAuth())
+def delete_image(request, image_id: int):
+    user = request.auth
+    user_image = get_object_or_404(Image, id=image_id, user=user)
+
+    # Deleting `user_image` triggers the post_delete signal on Image,
+    # which removes the file from FS automatically
+    user_image.delete()
+
+    return {"message": f"Image {image_id} deleted successfully."}
 
 
 @router.get("/interests", response=list[InterestSchema])
