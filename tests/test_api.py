@@ -485,7 +485,8 @@ def test_get_potential_pairs(client):
     # city=CityA is a direct match, also interest "hiking" is an overlap
     assert len(data["users"]) == 1
     assert data["users"][0]["surname"] == "One"
-    assert data["users"][0]["interests"] == ["hiking", "coding"]
+    interests = data["users"][0]["interests"].values()
+    assert "coding" in interests and "hiking" in interests
 
 
 @pytest.mark.django_db
