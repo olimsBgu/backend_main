@@ -21,7 +21,6 @@ def user_directory_path(instance, filename):
     return f"user_{instance.user.public_id}/images/{unique_name}"
 
 
-
 class Interest(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
@@ -116,6 +115,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     personal_id = models.CharField(max_length=50)
     user_type = models.CharField(max_length=50, choices=[('repatriate', 'Repatriate'), ('mentor', 'Mentor')])
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
+    sex = models.CharField(max_length=20, choices=[('male', 'Male'), ('female', 'Female')], default='male')
 
     approved = models.BooleanField(default=False)
     active = models.BooleanField(default=False)
@@ -125,18 +125,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Now each user references a City, University, FieldOfStudy by ID
     city = models.ForeignKey(
         City, null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name="users",
+        on_delete=models.SET_NULL, related_name="users",
     )
     university = models.ForeignKey(
         University, null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name="users",
+        on_delete=models.SET_NULL, related_name="users",
     )
     field_of_study = models.ForeignKey(
         FieldOfStudy, null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name="users",
+        on_delete=models.SET_NULL, related_name="users",
     )
 
     # Many-to-many to Interest
@@ -151,6 +148,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     login_code_expires_at = models.DateTimeField(null=True, blank=True)
     is_staff = models.BooleanField(default=False)
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    # M2M to track interactions with other users
+    viewed_users = models.ManyToManyField(
+        'self', blank=True, symmetrical=False, related_name='viewed_by'
+    )
+    saved_users = models.ManyToManyField(
+        'self', blank=True, symmetrical=False, related_name='saved_by'
+    )
 
     groups = models.ManyToManyField(
         "auth.Group",
@@ -196,3 +201,39 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         app_label = 'api'
 
+
+class Pending(models.Model):
+    from_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="pending_from"
+    )
+    to_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="pending_to"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Pending: {self.from_user.email} -> {self.to_user.email}"
+
+    class Meta:
+        verbose_name_plural = "Pending"
+
+
+class Match(models.Model):
+    ROLE_CHOICES = [
+        ('not_final', 'Not Final'),
+        ('final', 'Final'),
+    ]
+    user_a = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="matches_as_a"
+    )
+    user_b = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="matches_as_b"
+    )
+    status = models.CharField(max_length=50, choices=ROLE_CHOICES, default="not_final")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Match: {self.user_a.email} & {self.user_b.email} ({self.status})"
+
+    class Meta:
+        verbose_name_plural = "Matches"

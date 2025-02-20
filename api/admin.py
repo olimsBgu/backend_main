@@ -10,7 +10,7 @@ from django.conf import settings
 from django.urls import path
 from django.utils.html import format_html
 
-from .models import User, Interest, University, City, FieldOfStudy, Image
+from .models import User, Interest, University, City, FieldOfStudy, Image, Pending, Match
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,20 @@ class UserAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Make all fields optional except for email
+        # Make all fields optional except for 'email'
         for field_name, field in self.fields.items():
-            if field_name not in set('email'):
+            if field_name not in {"email"}:
                 field.required = False
+
+        if self.instance and self.instance.pk:
+            # Exclude self from 'partner':
+            self.fields["partner"].queryset = User.objects.exclude(pk=self.instance.pk)
+
+            # Exclude self from 'viewed_users':
+            self.fields["viewed_users"].queryset = User.objects.exclude(pk=self.instance.pk)
+
+            # Exclude self from 'saved_users':
+            self.fields["saved_users"].queryset = User.objects.exclude(pk=self.instance.pk)
 
     def clean_raw_login_code(self):
         raw_login_code = self.cleaned_data.get("raw_login_code")
@@ -57,6 +67,24 @@ class UserAdminForm(forms.ModelForm):
             if len(raw_login_code) > 128:
                 raise forms.ValidationError("The login code cannot exceed 128 characters.")
         return raw_login_code
+
+    def clean_partner(self):
+        partner = self.cleaned_data.get("partner")
+        if partner and self.instance and partner == self.instance:
+            raise forms.ValidationError("A user cannot be their own partner.")
+        return partner
+
+    def clean_viewed_users(self):
+        viewed = self.cleaned_data.get("viewed_users")
+        if self.instance and self.instance in viewed:
+            raise forms.ValidationError("A user cannot view themselves.")
+        return viewed
+
+    def clean_saved_users(self):
+        saved = self.cleaned_data.get("saved_users")
+        if self.instance and self.instance in saved:
+            raise forms.ValidationError("A user cannot save themselves.")
+        return saved
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -67,6 +95,34 @@ class UserAdminForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class MatchAdminForm(forms.ModelForm):
+    class Meta:
+        model = Match
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        user_a = cleaned_data.get("user_a")
+        user_b = cleaned_data.get("user_b")
+        if user_a and user_b and user_a == user_b:
+            raise forms.ValidationError("A match cannot have the same user as user_a and user_b.")
+        return cleaned_data
+
+
+class PendingAdminForm(forms.ModelForm):
+    class Meta:
+        model = Pending
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        from_user = cleaned_data.get("from_user")
+        to_user = cleaned_data.get("to_user")
+        if from_user and to_user and from_user == to_user:
+            raise forms.ValidationError("A user cannot like themselves (Pending from_user == to_user).")
+        return cleaned_data
 
 
 class ImageInline(admin.TabularInline):
@@ -81,6 +137,7 @@ class ImageInline(admin.TabularInline):
                 '<img src="{}" style="max-height: 100px;" />', obj.file.url
             )
         return ""
+
     preview.short_description = "Preview"
 
 
@@ -92,17 +149,20 @@ class UserAdmin(admin.ModelAdmin):
     search_fields = ('email', 'name', 'surname', 'user_type')
     actions = ['approve_users', 'reject_users']
 
-    # Add the inline:
     inlines = [ImageInline]
 
     fieldsets = (
         (None, {
-            'fields': ('email', 'name', 'surname', 'role', 'active', 'approved')
+            'fields': ('public_id', 'email', 'name', 'surname', 'role', 'active', 'approved')
         }),
         ('Personal Information', {
             'fields': (
-                'phone', 'birthdate', 'city', 'university', 'field_of_study', 'interests', 'description',
-                'partner', 'user_type')
+                'phone', 'birthdate', 'city', 'university', 'field_of_study',
+                'interests', 'description', 'partner', 'user_type'
+            )
+        }),
+        ('User Interactions', {
+            'fields': ('viewed_users', 'saved_users')
         }),
         ('Login Code', {
             'fields': ('raw_login_code', 'hashed_login_code'),
@@ -115,7 +175,7 @@ class UserAdmin(admin.ModelAdmin):
         }),
     )
 
-    readonly_fields = ('hashed_login_code',)  # Make the hashed login code read-only
+    readonly_fields = ('public_id', 'hashed_login_code',)  # Make the hashed login code read-only
 
     def approve_users(self, request, queryset):
         queryset.update(approved=True)
@@ -126,6 +186,29 @@ class UserAdmin(admin.ModelAdmin):
         queryset.update(approved=False)
 
     reject_users.short_description = "Reject selected users"
+
+    # (1) Filter horizontal can provide a nicer UX for M2M fields
+    filter_horizontal = ('viewed_users', 'saved_users', 'interests')
+
+
+@admin.register(Pending)
+class PendingAdmin(admin.ModelAdmin):
+    form = PendingAdminForm
+
+    list_display = ('id', 'from_user', 'to_user', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('from_user__email', 'to_user__email')
+    date_hierarchy = 'created_at'
+
+
+@admin.register(Match)
+class MatchAdmin(admin.ModelAdmin):
+    form = MatchAdminForm
+
+    list_display = ('id', 'user_a', 'user_b', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('user_a__email', 'user_b__email')
+    date_hierarchy = 'created_at'
 
 
 class DataUpdateAdmin(admin.ModelAdmin):

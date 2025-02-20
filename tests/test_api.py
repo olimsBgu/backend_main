@@ -10,7 +10,7 @@ from ninja_jwt.tokens import RefreshToken
 from ninja.errors import HttpError
 
 from api.models import (
-    User, City, University, FieldOfStudy, Interest, Image
+    User, City, University, FieldOfStudy, Interest, Image, Pending, Match
 )
 
 
@@ -424,43 +424,43 @@ def test_update_profile_invalid_city(client):
 @pytest.mark.django_db
 def test_get_potential_pairs(client):
     """
-    We want to ensure the /users/ endpoint returns matching mentors if they share city or interests.
-    Now city, interests are references, so create them properly.
+    Test the GET /users endpoint with pagination,
+    verifying that viewed/pending/matched are excluded.
     """
     city_a = City.objects.create(name="CityA")
     city_b = City.objects.create(name="CityB")
 
-    # Create some interests
-    interest_hiking = Interest.objects.create(name="hiking")
-    interest_reading = Interest.objects.create(name="reading")
-    interest_coding = Interest.objects.create(name="coding")
+    # interests
+    hiking = Interest.objects.create(name="hiking")
+    coding = Interest.objects.create(name="coding")
 
-    # Create a repatriate user
-    user = User.objects.create(
+    # Create a 'repatriate' user
+    repatriate = User.objects.create(
         email="repatriate@example.com",
         name="Repatriate",
         surname="Test",
         user_type="repatriate",
-        city=city_a,  # CityA
+        city=city_a,
         active=True,
         approved=True,
-        personal_id="123456789"
+        personal_id="111"
     )
-    user.interests.add(interest_hiking, interest_reading)
+    repatriate.interests.add(hiking)
 
-    # Create mentors
+    # Create mentor1 (same city, shared interest)
     mentor1 = User.objects.create(
         email="mentor1@example.com",
         name="Mentor",
         surname="One",
         user_type="mentor",
-        city=city_a,  # same as user
+        city=city_a,
         active=True,
         approved=True,
-        personal_id="123456798"
+        personal_id="222"
     )
-    mentor1.interests.add(interest_hiking, interest_coding)
+    mentor1.interests.add(hiking, coding)
 
+    # Create mentor2 (diff city, partial interest)
     mentor2 = User.objects.create(
         email="mentor2@example.com",
         name="Mentor",
@@ -469,24 +469,59 @@ def test_get_potential_pairs(client):
         city=city_b,
         active=True,
         approved=True,
-        personal_id="123456879"
+        personal_id="333"
     )
-    mentor2.interests.add(interest_coding)
+    mentor2.interests.add(coding)
 
-    refresh = RefreshToken.for_user(user)
+    # login repatriate
+    refresh = RefreshToken.for_user(repatriate)
     access_token = str(refresh.access_token)
-    url = reverse("api:get_potential_pairs")
 
-    response = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
-    assert response.status_code == 200
-    data = response.json()
+    url = reverse("api:get_potential_pairs")  # GET /users
 
-    # We expect only mentor1 to match: city=CityA or overlapping interests
-    # city=CityA is a direct match, also interest "hiking" is an overlap
-    assert len(data["users"]) == 1
+    # 1) No exclusions yet
+    resp = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp.status_code == 200
+    data = resp.json()
+    users_list = data["users"]
+    assert len(users_list) == 1
     assert data["users"][0]["surname"] == "One"
-    interests = data["users"][0]["interests"].values()
-    assert "coding" in interests and "hiking" in interests
+
+    # 2) Mark mentor1 as viewed => should exclude mentor1 now
+    repatriate.viewed_users.add(mentor1)
+
+    resp2 = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    # Now mentor1 is excluded, so 0
+    assert len(data2["users"]) == 0
+
+    # 3) Create a mentor3 in same city => see if we get pagination
+    for i in range(3, 15):
+        m = User.objects.create(
+            email=f"mentor{i}@example.com",
+            name=f"Mentor{i}",
+            surname="Paginated",
+            user_type="mentor",
+            city=city_a,
+            active=True,
+            approved=True,
+            personal_id=f"900{i}"
+        )
+        m.interests.add(hiking)
+
+    resp3 = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    data3 = resp3.json()
+    # By default, 10 items per page
+    assert data3["current_page"] == 1
+    assert data3["total_pages"] > 1
+    assert len(data3["users"]) == 10  # first page
+
+    # page=2
+    resp4 = client.get(url + "?page=2", HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    data4 = resp4.json()
+    assert data4["current_page"] == 2
+    assert len(data4["users"]) == 2
 
 
 @pytest.mark.django_db
@@ -634,3 +669,245 @@ def test_delete_image(client, tmpdir):
         user_folder = os.path.join(settings.MEDIA_ROOT, f"user_{user.public_id}")
         if os.path.exists(user_folder):
             shutil.rmtree(user_folder, ignore_errors=True)
+
+
+@pytest.mark.django_db
+def test_get_user(client):
+    """
+    Test GET /user/{public_id} returns the minimal user info by public id.
+    """
+    user = User.objects.create(
+        email="test@example.com",
+        name="Test",
+        surname="User",
+        user_type="repatriate",
+        active=True,
+        approved=True,
+        personal_id="999"
+    )
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    url = reverse("api:get_user", args=[user.public_id])
+
+    resp = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp.status_code == 200
+    data = resp.json()
+    # Should match user info
+    assert data["surname"] == "User"
+    assert data["public_id"] == str(user.public_id)
+
+
+@pytest.mark.django_db
+def test_dislike_soft_transition(client):
+    """
+    Test POST /dislike/{public_id} with "soft transition":
+      - if user already saved the target, remove from 'saved_users' automatically
+    """
+    city = City.objects.create(name="TestCity")
+    user = User.objects.create(
+        email="user1@example.com",
+        user_type="repatriate",
+        active=True,
+        approved=True,
+        city=city,
+        personal_id="123"
+    )
+    target = User.objects.create(
+        email="user2@example.com",
+        user_type="mentor",
+        active=True,
+        approved=True,
+        city=city,
+        personal_id="456"
+    )
+
+    # user "save" the target
+    user.saved_users.add(target)
+    assert target in user.saved_users.all()
+
+    # login
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    url = reverse("api:mark_as_viewed", args=[target.public_id])
+
+    resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["message"] == f"You disliked {target.get_full_name()}"
+
+    user.refresh_from_db()
+    # "soft transition": target should no longer be in saved_users
+    assert target not in user.saved_users.all()
+    # Instead target is in viewed_users
+    assert target in user.viewed_users.all()
+
+
+@pytest.mark.django_db
+def test_save_soft_transition(client):
+    """
+    Test POST /save/{public_id}:
+      - if user disliked the target, remove from 'viewed_users' automatically
+    """
+    user = User.objects.create(
+        email="user1@example.com", user_type="repatriate",
+        active=True, approved=True, personal_id="123"
+    )
+    target = User.objects.create(
+        email="user2@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="456"
+    )
+
+    # user disliked target
+    user.viewed_users.add(target)
+    assert target in user.viewed_users.all()
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    url = reverse("api:save_user", args=[target.public_id])
+    resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["message"] == f"You saved {target.get_full_name()}"
+
+    user.refresh_from_db()
+    # target removed from viewed_users
+    assert target not in user.viewed_users.all()
+    # now in saved_users
+    assert target in user.saved_users.all()
+
+
+@pytest.mark.django_db
+def test_like_soft_transition(client):
+    """
+    Test POST /like/{public_id}:
+      - if user disliked or saved the target, remove them from old set
+      - create or reuse a Pending, unless the other user already liked me => Match.
+    """
+    user = User.objects.create(
+        email="user1@example.com", user_type="repatriate",
+        active=True, approved=True, personal_id="111"
+    )
+    target = User.objects.create(
+        email="user2@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="222"
+    )
+
+    # Let's mark user disliked + saved target for some reason
+    user.viewed_users.add(target)
+    user.saved_users.add(target)
+    assert target in user.viewed_users.all()
+    assert target in user.saved_users.all()
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+
+    url = reverse("api:like_user", args=[target.public_id])
+
+    # 1) Like => remove from both sets, create pending
+    resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "Like saved for" in data["message"]
+    user.refresh_from_db()
+    # removed from viewed_users/saved_users
+    assert target not in user.saved_users.all()
+    # pending from user->target
+    assert Pending.objects.filter(from_user=user, to_user=target).exists()
+
+    # 2) Let the target user now "like" me => match
+    refresh2 = RefreshToken.for_user(target)
+    access_token2 = str(refresh2.access_token)
+    url2 = reverse("api:like_user", args=[user.public_id])
+    resp2 = client.post(url2, HTTP_AUTHORIZATION=f"Bearer {access_token2}")
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["message"] == "It's a match!"
+    # The pending from target->me => doesn't exist,
+    # but we do see user had a pending user->target, so the second user's like triggers a match
+    # that line might be slightly different if your logic is reversed
+
+    # confirm a match is created
+    m = Match.objects.all()[0]
+    # user is user_a, target is user_b
+    assert m.user_a == target or m.user_b == target
+    assert m.user_a == user or m.user_b == user
+    assert m.status == "not_final"
+
+
+@pytest.mark.django_db
+def test_like_block_if_pending(client):
+    """
+    If there's already a pending in any direction, we should block or fail with 400
+    """
+    user = User.objects.create(
+        email="user1@example.com", user_type="repatriate",
+        active=True, approved=True, personal_id="111"
+    )
+    target = User.objects.create(
+        email="user2@example.com", name='Semen', surname='Igor', user_type="mentor",
+        active=True, approved=True, personal_id="222"
+    )
+    # create a pending from user->target
+    Pending.objects.create(from_user=user, to_user=target)
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+    url = reverse("api:like_user", args=[target.public_id])
+
+    resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    # Because your "check_and_transition_state('like', ...)" sees a pending with from_user=user->target
+    assert resp.status_code == 400
+    assert 'You already liked Semen Igor.' in resp.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_dislike_block_if_match(client):
+    """
+    If the user is already in a Match, we block new actions.
+    """
+    user = User.objects.create(
+        email="u1@example.com", user_type="repatriate",
+        active=True, approved=True, personal_id="111"
+    )
+    target = User.objects.create(
+        email="u2@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="222"
+    )
+    Match.objects.create(user_a=user, user_b=target, status="not_final")
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+    url = reverse("api:mark_as_viewed", args=[target.public_id])  # /dislike/
+
+    resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp.status_code == 400
+    assert "already have a Match" in resp.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_save_block_if_partner(client):
+    """
+    If user.partner == target or vice versa, block new actions
+    """
+    user = User.objects.create(
+        email="u1@example.com", user_type="repatriate",
+        active=True, approved=True, personal_id="111"
+    )
+    target = User.objects.create(
+        email="u2@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="222"
+    )
+    # set partner
+    user.partner = target
+    user.save()
+
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+    url = reverse("api:save_user", args=[target.public_id])  # /save/
+
+    resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    assert resp.status_code == 400
+    assert "already partners" in resp.json()["detail"]

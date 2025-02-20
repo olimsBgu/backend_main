@@ -1,6 +1,7 @@
 import re
 from datetime import date
 from typing import Optional, List
+from uuid import UUID
 
 from ninja import ModelSchema, Schema, Field
 from pydantic import EmailStr, constr, validator
@@ -42,7 +43,8 @@ class UserProfileSchema(ModelSchema):
     university: Optional[str] = None
     field_of_study: Optional[str] = None
     interests: dict[int, str] = Field(default_factory=dict)
-    partner: Optional[int] = None
+    partner: Optional[UUID] = None
+    saved_users: Optional[list[UUID]] = None
 
     class Config:
         model = User
@@ -74,8 +76,12 @@ class UserProfileSchema(ModelSchema):
         return {i.id: i.name for i in obj.interests.all()}
 
     @staticmethod
-    def resolve_partner(obj: User) -> Optional[int]:
-        return obj.partner.id if obj.partner else None
+    def resolve_partner(obj: User) -> Optional[UUID]:
+        return obj.partner.public_id if obj.partner else None
+
+    @staticmethod
+    def resolve_saved_users(obj: User) -> list[UUID]:
+        return [user.public_id for user in obj.saved_users.all()]
 
 
 class UpdateProfileSchema(Schema):
@@ -125,7 +131,6 @@ class SimpleUserSchema(ModelSchema):
     university: Optional[str] = None
     field_of_study: Optional[str] = None
     interests: dict[int, str] = Field(default_factory=dict)
-    partner: Optional[int] = None
 
     class Config:
         model = User
@@ -157,6 +162,9 @@ class SimpleUserSchema(ModelSchema):
 
 class UserListSchema(Schema):
     users: List[SimpleUserSchema]
+    current_page: int
+    total_pages: int
+    has_next: bool
 
 
 class ImageResponseSchema(Schema):
@@ -196,3 +204,14 @@ class CitySchema(Schema):
 class FieldOfStudySchema(Schema):
     id: int
     name: str
+
+
+class PublicIdSchema(Schema):
+    public_id: UUID
+
+
+class MatchCreationSchema(Schema):
+    message: str
+
+class PaginationQuery(Schema):
+    page: Optional[int] = 1

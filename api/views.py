@@ -1,12 +1,11 @@
-import os
 import random
 import string
-import uuid
+from uuid import UUID
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.files.base import ContentFile
-from django.core.mail import send_mail
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from ninja import Router, Query, Form
@@ -17,12 +16,13 @@ from ninja_jwt.authentication import JWTAuth
 from ninja_jwt.schema import TokenRefreshInputSchema, TokenRefreshOutputSchema
 from ninja_jwt.tokens import RefreshToken
 
-from .models import User, Interest, University, City, FieldOfStudy, Image
+from .models import User, Interest, University, City, FieldOfStudy, Image, Pending, Match
 from .schemas import UpdateProfileSchema, UserListSchema, ImageResponseSchema, \
-    RequestApprovalSchema, MessageSchema, UserProfileSchema
+    RequestApprovalSchema, MessageSchema, UserProfileSchema, MatchCreationSchema, SimpleUserSchema, PaginationQuery
 from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, \
     UniversitySchema, CitySchema, FieldOfStudySchema
-from .utilities.validators import validate_image_file
+from .utilities.validators import validate_image_file, handle_like, handle_save, \
+    handle_dislike
 
 
 # Security class for token-based authentication
@@ -258,32 +258,77 @@ def update_profile(request, payload: UpdateProfileSchema):
 
 
 @router.get("/users", response=UserListSchema, auth=JWTBearer())
-def get_potential_pairs(request):
-    """Return a list of users with whom the authenticated user can form a pair."""
+def get_potential_pairs(request, pagination: PaginationQuery = Query(...)):
+    """
+    Return a paginated list of users with whom the authenticated user can form a pair.
+    Exclude users:
+      - already viewed
+      - in pending relationship (any direction)
+      - in match relationship (any status)
+    """
     user = request.auth
+    page_number = pagination.page or 1  # Ensure default=1
 
-    # Determine the opposite role
+    # 1) Determine the opposite role
     target_role = "mentor" if user.user_type == "repatriate" else "repatriate"
 
-    # Fetch users who:
-    # 1. Have the opposite role.
-    # 2. Are not yet paired.
-    # 3. Share similar interests or are from the same city.
-    potential_pairs = (
-        User.objects.filter(
-            user_type=target_role,
-            partner__isnull=True,  # Ensure the user is not already paired
-            active=True,  # Ensure the user is active
-            approved=True,  # Ensure the user is approved
-        )
-        .filter(
-            Q(city=user.city) | Q(interests__in=user.interests.all())
-        )
-        .exclude(id=user.id)  # Exclude the current user
-        .distinct()
-    )
+    # 2) Base queryset: potential users
+    base_qs = User.objects.filter(
+        user_type=target_role,
+        partner__isnull=True,  # not already paired
+        active=True,
+        approved=True,
+    ).filter(
+        Q(city=user.city) | Q(interests__in=user.interests.all())
+    ).exclude(id=user.id).distinct()
 
-    return {"users": list(potential_pairs)}
+    # 3) Gather IDs that should be excluded
+
+    # (a) already viewed
+    viewed_ids = user.viewed_users.values_list('id', flat=True)
+
+    # (b) pending (either from_user=user or to_user=user)
+    pending_from = Pending.objects.filter(from_user=user).values_list('to_user_id', flat=True)
+    pending_to = Pending.objects.filter(to_user=user).values_list('from_user_id', flat=True)
+
+    # (c) matched (either user_a=user or user_b=user)
+    #  We'll collect the "other" user's IDs from all matches involving me
+    matched_qs = Match.objects.filter(Q(user_a=user) | Q(user_b=user))
+    matched_ids = set()
+    for m in matched_qs:
+        matched_ids.add(m.user_a_id)
+        matched_ids.add(m.user_b_id)
+
+    # Build a single set of excluded IDs
+    excluded_ids = set(viewed_ids) | set(pending_from) | set(pending_to) | matched_ids
+
+    # 4) Exclude them
+    potential_qs = base_qs.exclude(id__in=excluded_ids)
+
+    # 5) Pagination
+    paginator = Paginator(potential_qs, 10)  # 10 users per page
+    page_obj = paginator.get_page(page_number)
+
+    # 6) Return the paginated users
+    users_page = list(page_obj.object_list)  # the actual User objects
+
+    # "UserListSchema" typically expects {"users": [ <serialized users> ]}
+    # We'll rely on your existing logic to convert them to the schema shape
+    return {
+        "users": users_page,
+        "current_page": page_obj.number,
+        "total_pages": paginator.num_pages,
+        "has_next": page_obj.has_next(),
+    }
+
+
+@router.get("/user/{target_public_id}", response=SimpleUserSchema, auth=JWTAuth())
+def get_user(request, target_public_id: UUID):
+    """
+    Get minimal user info by his public id
+    """
+    target_user = get_object_or_404(User, public_id=target_public_id)
+    return target_user
 
 
 @router.post("/image", response=ImageResponseSchema, auth=JWTAuth())
@@ -324,9 +369,9 @@ def upload_image(request, image: UploadedFile = File(...)):
 
 @router.post("/replace-image", response=ImageResponseSchema, auth=JWTAuth())
 def replace_image(
-    request,
-    image_id: int = Form(...),
-    image: UploadedFile = File(...)
+        request,
+        image_id: int = Form(...),
+        image: UploadedFile = File(...)
 ):
     """
     Replace an existing image (by image_id) with a new file.
@@ -389,3 +434,51 @@ def get_cities(request):
 def get_fields_of_study(request):
     fields_of_study = FieldOfStudy.objects.all()
     return fields_of_study
+
+
+@router.post("/dislike/{target_public_id}", response=MessageSchema, auth=JWTAuth())
+def mark_as_viewed(request, target_public_id: UUID):
+    user = request.auth
+    target_user = get_object_or_404(User, public_id=target_public_id)
+
+    handle_dislike(user, target_user)
+    # Add to 'viewed_users'
+    user.viewed_users.add(target_user)
+
+    return {"message": f"You disliked {target_user.get_full_name()}"}
+
+
+@router.post("/save/{target_public_id}", response=MessageSchema, auth=JWTAuth())
+def save_user(request, target_public_id: UUID):
+    user = request.auth
+    target_user = get_object_or_404(User, public_id=target_public_id)
+
+    handle_save(user, target_user)
+    # Add to 'saved_users'
+    user.saved_users.add(target_user)
+
+    return {"message": f"You saved {target_user.get_full_name()}"}
+
+
+@router.post("/like/{target_public_id}", response=MatchCreationSchema, auth=JWTAuth())
+def like_user(request, target_public_id: UUID):
+    user = request.auth
+    target_user = get_object_or_404(User, public_id=target_public_id)
+
+    handle_like(user, target_user)
+
+    # Next, check if there's a pending from target->user => form a match
+    existing = Pending.objects.filter(from_user=target_user, to_user=user).first()
+    if existing:
+        existing.delete()
+        new_match = Match.objects.create(
+            user_a=user,
+            user_b=target_user,
+            status="not_final"
+        )
+        return {"message": "It's a match!", "match_id": new_match.id}
+    else:
+        # otherwise create or reuse pending from user->target
+        if not Pending.objects.filter(from_user=user, to_user=target_user).exists():
+            Pending.objects.create(from_user=user, to_user=target_user)
+        return {"message": f"Like saved for {target_user.get_full_name()}. Waiting for them to like you back."}
