@@ -15,12 +15,14 @@ from ninja.security import HttpBearer
 from ninja_jwt.authentication import JWTAuth
 from ninja_jwt.schema import TokenRefreshInputSchema, TokenRefreshOutputSchema
 from ninja_jwt.tokens import RefreshToken
+from typing import List
 
 from .models import User, Interest, University, City, FieldOfStudy, Image, Pending, Match
+from chat.models import Chat, ChatMessage
 from .schemas import UpdateProfileSchema, UserListSchema, ImageResponseSchema, \
     RequestApprovalSchema, MessageSchema, UserProfileSchema, MatchCreationSchema, SimpleUserSchema, PaginationQuery
 from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, \
-    UniversitySchema, CitySchema, FieldOfStudySchema
+    UniversitySchema, CitySchema, FieldOfStudySchema, ChatMessageSchema, ChatSchema
 from .utilities.validators import validate_image_file, handle_like, handle_save, \
     handle_dislike
 
@@ -322,7 +324,7 @@ def get_potential_pairs(request, pagination: PaginationQuery = Query(...)):
     }
 
 
-@router.get("/user/{target_public_id}", response=SimpleUserSchema, auth=JWTAuth())
+@router.get("/user/id_{target_public_id}", response=SimpleUserSchema, auth=JWTAuth())
 def get_user(request, target_public_id: UUID):
     """
     Get minimal user info by his public id
@@ -482,3 +484,102 @@ def like_user(request, target_public_id: UUID):
         if not Pending.objects.filter(from_user=user, to_user=target_user).exists():
             Pending.objects.create(from_user=user, to_user=target_user)
         return {"message": f"Like saved for {target_user.get_full_name()}. Waiting for them to like you back."}
+
+
+def generate_ws_key_for_users(user1: User, user2: User) -> str:
+    """
+    Generate a consistent key based on user public_ids.
+    """
+    sorted_ids = sorted([str(user1.public_id), str(user2.public_id)])
+    return f"chat_{'_'.join(sorted_ids)}"
+
+
+@router.get("/user/get_all_chats", response=List[ChatSchema], auth=JWTAuth())
+def get_all_chats(request):
+    """
+    Get list of the authenticated user's chats.
+    """
+    user = request.auth
+
+    # logger = logging.getLogger("django")
+    # logger.info("chlen")
+
+    if not isinstance(user, User):
+        return []
+
+    user_chats = Chat.objects.filter(users=user)
+    result = []
+    for c in user_chats:
+        user_ids = [u.public_id for u in c.users.all()]
+        result.append(ChatSchema(ws_key=c.ws_key, user_ids=user_ids))
+    return result
+
+
+@router.post("/make_chat/{target_public_id}", response=ChatSchema, auth=JWTAuth())
+def make_chat(request, target_public_id: UUID):
+    """
+    Create or retrieve a WebSocket-based chat between the authenticated user and target_public_id.
+    """
+    user1 = request.auth
+    user2 = get_object_or_404(User, public_id=target_public_id)
+
+    if user1.id == user2.id:
+        raise HttpError(400, "Cannot create a chat with yourself.")
+
+    # Generate or retrieve the ws_key
+    ws_key = generate_ws_key_for_users(user1, user2)
+    chat_obj, created = Chat.objects.get_or_create(ws_key=ws_key)
+    chat_obj.users.add(user1, user2)
+
+    user_ids = [u.public_id for u in chat_obj.users.all()]
+    return ChatSchema(ws_key=chat_obj.ws_key, user_ids=user_ids)
+
+
+@router.post("/send_message/{target_public_id}", response=ChatMessageSchema, auth=JWTAuth())
+def send_message(request, target_public_id: UUID, message: str = Form(...)):
+    """
+    Sends a message from the authenticated user to target_public_id.
+    Must check if they have a chat together first.
+    """
+    sender = request.auth
+    receiver = get_object_or_404(User, public_id=target_public_id)
+
+    # Find an existing chat that has both users
+    chat_obj = Chat.objects.filter(users=sender).filter(users=receiver).distinct().first()
+    if not chat_obj:
+        raise HttpError(400, "No chat found between these users. Create one first.")
+
+    new_message = ChatMessage.objects.create(chat=chat_obj, sender=sender, content=message)
+    return ChatMessageSchema(
+        sender_id=sender.public_id,
+        content=new_message.content,
+        created_at=str(new_message.created_at)
+    )
+
+
+@router.get("/make_ws_key/{target_public_id}", response=dict, auth=JWTAuth())
+def make_ws_key(request, target_public_id: UUID):
+    """
+    Generate a union WebSocket key between request.auth and target_public_id.
+    (Does not create a Chat record; just returns the key.)
+    """
+    user1 = request.auth
+    user2 = get_object_or_404(User, public_id=target_public_id)
+
+    if user1.id == user2.id:
+        raise HttpError(400, "Cannot generate a key for the same user.")
+
+    ws_key = generate_ws_key_for_users(user1, user2)
+    return {"ws_key": ws_key}
+
+
+@router.get("/get_users_from_key/{ws_key}", response=List[UUID])
+def get_users_from_key(request, ws_key: str):
+    """
+    Return the list of users' public_ids that are in this ws_key.
+    """
+    chat_obj = Chat.objects.filter(ws_key=ws_key).first()
+    if not chat_obj:
+        return []
+    return [u.public_id for u in chat_obj.users.all()]
+

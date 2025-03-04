@@ -42,7 +42,9 @@ INSTALLED_APPS = [
     "ninja_jwt",
     "ninja_jwt.token_blacklist",
     "corsheaders",
-    "api"
+    'channels',
+    "api",
+    "chat"
 ]
 
 MIDDLEWARE = [
@@ -76,6 +78,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "rimonim.wsgi.application"
+
+ASGI_APPLICATION = "rimonim.asgi.application"
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -126,14 +136,23 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-# URL to use when referring to static files (e.g., in templates)
-STATIC_URL = '/static/'
+# # URL to use when referring to static files (e.g., in templates)
+# STATIC_URL = '/static/'
+#
+# # The absolute path to the directory where static files will be collected to
+# STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+#
+# # Additional directories where Django will look for static files (useful for development)
+# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
-# The absolute path to the directory where static files will be collected to
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# Additional directories where Django will look for static files (useful for development)
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+if not DEBUG:
+    STATIC_URL = "/static/"
+    STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+    STATIC_ROOT = None
+else:
+    STATIC_URL = "/static/"
+    STATICFILES_DIRS = []
+    STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

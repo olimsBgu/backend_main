@@ -213,5 +213,17 @@ class PublicIdSchema(Schema):
 class MatchCreationSchema(Schema):
     message: str
 
+
 class PaginationQuery(Schema):
     page: Optional[int] = 1
+
+
+class ChatSchema(Schema):
+    ws_key: str
+    user_ids: List[UUID]
+
+
+class ChatMessageSchema(Schema):
+    sender_id: UUID
+    content: str
+    created_at: str
