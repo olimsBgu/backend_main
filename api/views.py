@@ -494,8 +494,8 @@ def generate_ws_key_for_users(user1: User, user2: User) -> str:
     return f"chat_{'_'.join(sorted_ids)}"
 
 
-@router.get("/user/get_all_chats", response=List[ChatSchema], auth=JWTAuth())
-def get_all_chats(request):
+@router.get("/user/chats", response=List[ChatSchema], auth=JWTAuth())
+def chats(request):
     """
     Get list of the authenticated user's chats.
     """
@@ -509,9 +509,22 @@ def get_all_chats(request):
 
     user_chats = Chat.objects.filter(users=user)
     result = []
-    for c in user_chats:
-        user_ids = [u.public_id for u in c.users.all()]
-        result.append(ChatSchema(ws_key=c.ws_key, user_ids=user_ids))
+    for chat in user_chats:
+        user_ids = [u.public_id for u in chat.users.all()]
+
+        # Берём последнее сообщение, если оно есть
+        last_message = chat.messages.order_by("-created_at").first()
+        last_message_data = None
+        if last_message:
+            # logger.info(last_message)
+            last_message_data = ChatMessageSchema(
+                sender_id=last_message.sender.public_id,
+                content=last_message.content,
+                created_at=last_message.created_at.isoformat(),
+            )
+
+        result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data))
+
     return result
 
 
@@ -533,53 +546,3 @@ def make_chat(request, target_public_id: UUID):
 
     user_ids = [u.public_id for u in chat_obj.users.all()]
     return ChatSchema(ws_key=chat_obj.ws_key, user_ids=user_ids)
-
-
-@router.post("/send_message/{target_public_id}", response=ChatMessageSchema, auth=JWTAuth())
-def send_message(request, target_public_id: UUID, message: str = Form(...)):
-    """
-    Sends a message from the authenticated user to target_public_id.
-    Must check if they have a chat together first.
-    """
-    sender = request.auth
-    receiver = get_object_or_404(User, public_id=target_public_id)
-
-    # Find an existing chat that has both users
-    chat_obj = Chat.objects.filter(users=sender).filter(users=receiver).distinct().first()
-    if not chat_obj:
-        raise HttpError(400, "No chat found between these users. Create one first.")
-
-    new_message = ChatMessage.objects.create(chat=chat_obj, sender=sender, content=message)
-    return ChatMessageSchema(
-        sender_id=sender.public_id,
-        content=new_message.content,
-        created_at=str(new_message.created_at)
-    )
-
-
-@router.get("/make_ws_key/{target_public_id}", response=dict, auth=JWTAuth())
-def make_ws_key(request, target_public_id: UUID):
-    """
-    Generate a union WebSocket key between request.auth and target_public_id.
-    (Does not create a Chat record; just returns the key.)
-    """
-    user1 = request.auth
-    user2 = get_object_or_404(User, public_id=target_public_id)
-
-    if user1.id == user2.id:
-        raise HttpError(400, "Cannot generate a key for the same user.")
-
-    ws_key = generate_ws_key_for_users(user1, user2)
-    return {"ws_key": ws_key}
-
-
-@router.get("/get_users_from_key/{ws_key}", response=List[UUID])
-def get_users_from_key(request, ws_key: str):
-    """
-    Return the list of users' public_ids that are in this ws_key.
-    """
-    chat_obj = Chat.objects.filter(ws_key=ws_key).first()
-    if not chat_obj:
-        return []
-    return [u.public_id for u in chat_obj.users.all()]
-
