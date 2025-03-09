@@ -29,7 +29,6 @@ jobs:
       - name: Run migrations
         run: |
           python manage.py migrate --settings=rimonim.settings.test
-          sleep 5
 
       - name: Run pytest
         run: |
