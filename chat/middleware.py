@@ -13,11 +13,9 @@ def get_user_from_token(token):
     try:
         access_token = AccessToken(token)
         user = User.objects.get(id=access_token["user_id"])
-        logger.info(f"Пользователь найден: {user}")
         return user
-    except Exception as e:
-        logger.error(f"Ошибка аутентификации: {e}")
-        return None  # Если токен невалидный, возвращаем None
+    except Exception:
+        return None
 
 
 class JWTAuthMiddleware:
@@ -29,8 +27,6 @@ class JWTAuthMiddleware:
         query_params = parse_qs(scope["query_string"].decode())
         token = query_params.get("token", [None])[0]
 
-        logger.info(f"Получен токен: {token}")
-
         user = await get_user_from_token(token)
 
         if not user:  # Если токена нет или он невалидный, сразу выкидываем
@@ -41,6 +37,5 @@ class JWTAuthMiddleware:
             return
 
         scope["user"] = user
-        logger.info(f"Пользователь после аутентификации: {user}")
 
         return await self.inner(scope, receive, send)

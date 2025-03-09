@@ -1,10 +1,15 @@
 import json
+
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from chat.models import Chat, ChatMessage
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.room_group_name = None
 
     async def connect(self):
         self.user = self.scope.get("user")
@@ -42,14 +47,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
         # Подгружаем последние сообщения
-        messages = await self.fetch_messages(self.user, room_name)
+        messages = await self.fetch_messages(room_name)
         await self.send(text_data=json.dumps({
             "type": "chat_history",
             "messages": messages
         }))
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        if self.room_group_name:
+            await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive(self, text_data):
         """ Обрабатывает входящие сообщения от клиента """
@@ -58,15 +64,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if message:
             # Сохранить сообщение в БД
-            await self.save_message(self.user, self.room_group_name, message)
+            time = await self.save_message(self.user, self.room_group_name, message)
 
             # Отправить сообщение всем участникам чата
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     "type": "chat_message",
-                    "username": self.user.name,
-                    "message": message
+                    "public_id": str(self.user.public_id),
+                    "message": message,
+                    "time": time.strftime("%d/%m/%Y, %H:%M:%S")
                 }
             )
 
@@ -74,8 +81,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         """ Отправляет сообщение клиенту """
         await self.send(text_data=json.dumps({
             "type": "chat_message",
-            "username": event["username"],
-            "message": event["message"]
+            "public_id": str(event["public_id"]),
+            "message": event["message"],
+            "time": event["time"]
         }))
 
     @database_sync_to_async
@@ -90,18 +98,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def save_message(self, user, room_name, content):
         """ Сохраняет сообщение в БД """
-        chat = Chat.objects.filter(users__public_id__in=[user.public_id]).first()
+        chat = Chat.objects.get(ws_key=room_name)
         if chat:
-            ChatMessage.objects.create(chat=chat, sender=user, content=content)
+            chat_message = ChatMessage.objects.create(chat=chat, sender=user, content=content)
+            return chat_message.created_at
 
     @database_sync_to_async
-    def fetch_messages(self, user, room_name):
+    def fetch_messages(self, room_name):
         """ Получает последние 20 сообщений чата """
-        chat = Chat.objects.filter(users__public_id__in=[user.public_id]).first()
+        chat = Chat.objects.get(ws_key=room_name)
         if chat:
-            messages = ChatMessage.objects.filter(chat=chat).order_by("-created_at")[:20]
+            messages = ChatMessage.objects.filter(chat=chat).order_by("-created_at")
             return [
-                {"username": msg.sender.name, "message": msg.content}
+                {"public_id": str(msg.sender.public_id), "message": msg.content, "time": msg.created_at.strftime("%d/%m/%Y, %H:%M:%S")}
                 for msg in reversed(messages)
             ]
         return []
