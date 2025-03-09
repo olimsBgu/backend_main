@@ -26,9 +26,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create test database
+        run: |
+          PGPASSWORD=securepassword psql -h localhost -U rimonim_user -d postgres -c "CREATE DATABASE rimonim_db;"
+
       - name: Run migrations
         run: |
           python manage.py migrate --settings=rimonim.settings.test
+          sleep 5
 
       - name: Run pytest
         run: |
