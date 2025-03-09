@@ -11,3 +11,5 @@ pydantic[email]
 requests
 django-cors-headers
 pillow
+channels
+daphne
