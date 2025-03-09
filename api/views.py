@@ -478,6 +478,16 @@ def like_user(request, target_public_id: UUID):
             user_b=target_user,
             status="not_final"
         )
+
+        if user.id == target_user.id:
+            raise HttpError(400, "Cannot create a chat with yourself.")
+
+        # Generate or retrieve the ws_key
+        sorted_ids = sorted([str(user.public_id), str(target_user.public_id)])
+        ws_key = f"chat_{'_'.join(sorted_ids)}"
+        chat_obj, created = Chat.objects.get_or_create(ws_key=ws_key)
+        chat_obj.users.add(user, target_user)
+
         return {"message": "It's a match!", "match_id": new_match.id}
     else:
         # otherwise create or reuse pending from user->target
@@ -486,23 +496,12 @@ def like_user(request, target_public_id: UUID):
         return {"message": f"Like saved for {target_user.get_full_name()}. Waiting for them to like you back."}
 
 
-def generate_ws_key_for_users(user1: User, user2: User) -> str:
-    """
-    Generate a consistent key based on user public_ids.
-    """
-    sorted_ids = sorted([str(user1.public_id), str(user2.public_id)])
-    return f"chat_{'_'.join(sorted_ids)}"
-
-
 @router.get("/user/chats", response=List[ChatSchema], auth=JWTAuth())
 def chats(request):
     """
     Get list of the authenticated user's chats.
     """
     user = request.auth
-
-    # logger = logging.getLogger("django")
-    # logger.info("chlen")
 
     if not isinstance(user, User):
         return []
@@ -516,7 +515,6 @@ def chats(request):
         last_message = chat.messages.order_by("-created_at").first()
         last_message_data = None
         if last_message:
-            # logger.info(last_message)
             last_message_data = ChatMessageSchema(
                 sender_id=last_message.sender.public_id,
                 content=last_message.content,
@@ -526,23 +524,3 @@ def chats(request):
         result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data))
 
     return result
-
-
-@router.post("/make_chat/{target_public_id}", response=ChatSchema, auth=JWTAuth())
-def make_chat(request, target_public_id: UUID):
-    """
-    Create or retrieve a WebSocket-based chat between the authenticated user and target_public_id.
-    """
-    user1 = request.auth
-    user2 = get_object_or_404(User, public_id=target_public_id)
-
-    if user1.id == user2.id:
-        raise HttpError(400, "Cannot create a chat with yourself.")
-
-    # Generate or retrieve the ws_key
-    ws_key = generate_ws_key_for_users(user1, user2)
-    chat_obj, created = Chat.objects.get_or_create(ws_key=ws_key)
-    chat_obj.users.add(user1, user2)
-
-    user_ids = [u.public_id for u in chat_obj.users.all()]
-    return ChatSchema(ws_key=chat_obj.ws_key, user_ids=user_ids)
