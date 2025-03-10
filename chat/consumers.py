@@ -73,7 +73,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "type": "chat_message",
                     "public_id": str(self.user.public_id),
                     "message": message,
-                    "time": time.strftime("%d/%m/%Y, %H:%M:%S")
+                    "time": time.isoformat(timespec="milliseconds").split('+')[0] + "Z"
                 }
             )
 
@@ -110,7 +110,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if chat:
             messages = ChatMessage.objects.filter(chat=chat).order_by("-created_at")
             return [
-                {"public_id": str(msg.sender.public_id), "message": msg.content, "time": msg.created_at.strftime("%d/%m/%Y, %H:%M:%S")}
+                {"public_id": str(msg.sender.public_id), "message": msg.content, "time": msg.created_at.isoformat(timespec="milliseconds").split('+')[0] + "Z"}
                 for msg in reversed(messages)
             ]
         return []
