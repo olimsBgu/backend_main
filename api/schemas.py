@@ -37,6 +37,7 @@ class UserProfileSchema(ModelSchema):
     For a user's detailed profile, including images,
     plus references to city/university/field_of_study by name or ID.
     """
+    public_id: UUID
     images: dict[int, str] = Field(default_factory=dict)
 
     city: Optional[str] = None
@@ -49,7 +50,7 @@ class UserProfileSchema(ModelSchema):
     class Config:
         model = User
         model_fields = [
-            "name", "surname", "phone", "email",
+            "public_id", "name", "surname", "phone", "email",
             "approved", "active", "birthdate",
             "city", "university", "field_of_study",
             "description", "partner", "user_type"
