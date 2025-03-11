@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, Case, When, IntegerField, Count
 from django.shortcuts import get_object_or_404
 from ninja import Router, Query, Form
 from ninja import UploadedFile, File
@@ -263,38 +263,34 @@ def update_profile(request, payload: UpdateProfileSchema):
 def get_potential_pairs(request, pagination: PaginationQuery = Query(...)):
     """
     Return a paginated list of users with whom the authenticated user can form a pair.
-    Exclude users:
-      - already viewed
-      - in pending relationship (any direction)
-      - in match relationship (any status)
+    Show first those who match city or share interests, then everyone else,
+    but always ensuring:
+      - opposite user_type (mentor vs repatriate)
+      - partner is null
+      - active, approved
+      - exclude viewed, pending, matched
     """
-    user = request.auth
-    page_number = pagination.page or 1  # Ensure default=1
-
-    # 1) Determine the opposite role
+    user = request.auth  # current user
+    page_number = pagination.page or 1
     target_role = "mentor" if user.user_type == "repatriate" else "repatriate"
 
-    # 2) Base queryset: potential users
+    # Base queryset: all users of the opposite role
     base_qs = User.objects.filter(
         user_type=target_role,
-        partner__isnull=True,  # not already paired
+        partner__isnull=True,
         active=True,
-        approved=True,
-    ).filter(
-        Q(city=user.city) | Q(interests__in=user.interests.all())
-    ).exclude(id=user.id).distinct()
+        approved=True
+    ).exclude(id=user.id)
 
-    # 3) Gather IDs that should be excluded
-
-    # (a) already viewed
+    # Exclude users who are "viewed", "pending", or "matched"
     viewed_ids = user.viewed_users.values_list('id', flat=True)
 
-    # (b) pending (either from_user=user or to_user=user)
+    # Pending (either from_user=user or to_user=user)
     pending_from = Pending.objects.filter(from_user=user).values_list('to_user_id', flat=True)
     pending_to = Pending.objects.filter(to_user=user).values_list('from_user_id', flat=True)
 
-    # (c) matched (either user_a=user or user_b=user)
-    #  We'll collect the "other" user's IDs from all matches involving me
+    # (matched (either user_a=user or user_b=user)
+    # We'll collect the "other" user's IDs from all matches involving me
     matched_qs = Match.objects.filter(Q(user_a=user) | Q(user_b=user))
     matched_ids = set()
     for m in matched_qs:
@@ -303,21 +299,29 @@ def get_potential_pairs(request, pagination: PaginationQuery = Query(...)):
 
     # Build a single set of excluded IDs
     excluded_ids = set(viewed_ids) | set(pending_from) | set(pending_to) | matched_ids
+    base_qs = base_qs.exclude(id__in=excluded_ids)
 
-    # 4) Exclude them
-    potential_qs = base_qs.exclude(id__in=excluded_ids)
+    # Annotate priority: same city, shared interests
+    base_qs = base_qs.annotate(
+        same_city=Case(
+            When(city=user.city, then=1),
+            default=0,
+            output_field=IntegerField()
+        ),
+        common_interests=Count(
+            'interests',
+            filter=Q(interests__in=user.interests.all()),
+            distinct=True
+        )
+    ).order_by('-same_city', '-common_interests', 'public_id')
+    # ^ 'id' at the end just for a stable ordering among ties
 
-    # 5) Pagination
-    paginator = Paginator(potential_qs, 10)  # 10 users per page
+    # Paginate (10 users per page)
+    paginator = Paginator(base_qs, 10)
     page_obj = paginator.get_page(page_number)
 
-    # 6) Return the paginated users
-    users_page = list(page_obj.object_list)  # the actual User objects
-
-    # "UserListSchema" typically expects {"users": [ <serialized users> ]}
-    # We'll rely on your existing logic to convert them to the schema shape
     return {
-        "users": users_page,
+        "users": list(page_obj.object_list),
         "current_page": page_obj.number,
         "total_pages": paginator.num_pages,
         "has_next": page_obj.has_next(),
