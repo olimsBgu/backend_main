@@ -528,3 +528,27 @@ def chats(request):
         result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data))
 
     return result
+
+@router.get("/user/saved", response=UserListSchema, auth=JWTBearer())
+def get_saved_users(request, pagination: PaginationQuery = Query(...)):
+    """
+    Return a paginated list of users that the authenticated user has saved.
+    """
+    user = request.auth  # the currently authenticated user
+    page_number = pagination.page or 1
+
+    # Query all saved users
+    base_qs = user.saved_users.all()
+    base_qs = base_qs.filter(active=True, approved=True)
+
+    # Paginate (10 per page)
+    paginator = Paginator(base_qs, 10)
+    page_obj = paginator.get_page(page_number)
+
+    # Return the data matching your existing UserListSchema shape
+    return {
+        "users": list(page_obj.object_list),
+        "current_page": page_obj.number,
+        "total_pages": paginator.num_pages,
+        "has_next": page_obj.has_next(),
+    }

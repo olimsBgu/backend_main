@@ -912,3 +912,39 @@ def test_save_block_if_partner(client):
     resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
     assert resp.status_code == 400
     assert "already partners" in resp.json()["detail"]
+
+@pytest.mark.django_db
+def test_get_saved_users(client):
+    # 1) Create users
+    u1 = User.objects.create(
+        email="u1@example.com", user_type="repatriate",
+        active=True, approved=True, personal_id="111"
+    )
+    u2 = User.objects.create(
+        email="u2@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="222"
+    )
+    u3 = User.objects.create(
+        email="u3@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="333"
+    )
+
+    # 2) u1 saves u2
+    u1.saved_users.add(u2)
+
+    # 3) Authenticate as u1
+    refresh = RefreshToken.for_user(u1)
+    access_token = str(refresh.access_token)
+
+    # 4) Call the /user/saved endpoint
+    url = reverse("api:get_saved_users")
+    response = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+
+    assert response.status_code == 200
+
+    # 5) Verify that only u2 is returned in the "users" list
+    data = response.json()
+    returned_ids = [item["public_id"] for item in data["users"]]
+
+    assert str(u2.public_id) in returned_ids
+    assert str(u3.public_id) not in returned_ids
