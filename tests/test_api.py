@@ -484,8 +484,9 @@ def test_get_potential_pairs(client):
     assert resp.status_code == 200
     data = resp.json()
     users_list = data["users"]
-    assert len(users_list) == 1
+    assert len(users_list) == 2
     assert data["users"][0]["surname"] == "One"
+    assert data["users"][1]["surname"] == "Two"
 
     # 2) Mark mentor1 as viewed => should exclude mentor1 now
     repatriate.viewed_users.add(mentor1)
@@ -493,8 +494,8 @@ def test_get_potential_pairs(client):
     resp2 = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
     assert resp2.status_code == 200
     data2 = resp2.json()
-    # Now mentor1 is excluded, so 0
-    assert len(data2["users"]) == 0
+    # Now mentor1 is excluded, so 1
+    assert len(data2["users"]) == 1
 
     # 3) Create a mentor3 in same city => see if we get pagination
     for i in range(3, 15):
@@ -521,7 +522,7 @@ def test_get_potential_pairs(client):
     resp4 = client.get(url + "?page=2", HTTP_AUTHORIZATION=f"Bearer {access_token}")
     data4 = resp4.json()
     assert data4["current_page"] == 2
-    assert len(data4["users"]) == 2
+    assert len(data4["users"]) == 3
 
 
 @pytest.mark.django_db
