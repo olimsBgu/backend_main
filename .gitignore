@@ -4,4 +4,5 @@ env/
 .env
 # Ignore staticfiles directory
 staticfiles/
+media/
 debug.log
