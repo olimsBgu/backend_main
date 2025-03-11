@@ -484,8 +484,9 @@ def test_get_potential_pairs(client):
     assert resp.status_code == 200
     data = resp.json()
     users_list = data["users"]
-    assert len(users_list) == 1
+    assert len(users_list) == 2
     assert data["users"][0]["surname"] == "One"
+    assert data["users"][1]["surname"] == "Two"
 
     # 2) Mark mentor1 as viewed => should exclude mentor1 now
     repatriate.viewed_users.add(mentor1)
@@ -493,8 +494,8 @@ def test_get_potential_pairs(client):
     resp2 = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
     assert resp2.status_code == 200
     data2 = resp2.json()
-    # Now mentor1 is excluded, so 0
-    assert len(data2["users"]) == 0
+    # Now mentor1 is excluded, so 1
+    assert len(data2["users"]) == 1
 
     # 3) Create a mentor3 in same city => see if we get pagination
     for i in range(3, 15):
@@ -521,7 +522,7 @@ def test_get_potential_pairs(client):
     resp4 = client.get(url + "?page=2", HTTP_AUTHORIZATION=f"Bearer {access_token}")
     data4 = resp4.json()
     assert data4["current_page"] == 2
-    assert len(data4["users"]) == 2
+    assert len(data4["users"]) == 3
 
 
 @pytest.mark.django_db
@@ -911,3 +912,39 @@ def test_save_block_if_partner(client):
     resp = client.post(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
     assert resp.status_code == 400
     assert "already partners" in resp.json()["detail"]
+
+@pytest.mark.django_db
+def test_get_saved_users(client):
+    # 1) Create users
+    u1 = User.objects.create(
+        email="u1@example.com", user_type="repatriate",
+        active=True, approved=True, personal_id="111"
+    )
+    u2 = User.objects.create(
+        email="u2@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="222"
+    )
+    u3 = User.objects.create(
+        email="u3@example.com", user_type="mentor",
+        active=True, approved=True, personal_id="333"
+    )
+
+    # 2) u1 saves u2
+    u1.saved_users.add(u2)
+
+    # 3) Authenticate as u1
+    refresh = RefreshToken.for_user(u1)
+    access_token = str(refresh.access_token)
+
+    # 4) Call the /user/saved endpoint
+    url = reverse("api:get_saved_users")
+    response = client.get(url, HTTP_AUTHORIZATION=f"Bearer {access_token}")
+
+    assert response.status_code == 200
+
+    # 5) Verify that only u2 is returned in the "users" list
+    data = response.json()
+    returned_ids = [item["public_id"] for item in data["users"]]
+
+    assert str(u2.public_id) in returned_ids
+    assert str(u3.public_id) not in returned_ids
