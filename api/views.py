@@ -523,6 +523,7 @@ def chats(request):
                 sender_id=last_message.sender.public_id,
                 content=last_message.content,
                 created_at=last_message.created_at.isoformat(),
+                is_viewed=last_message.is_viewed,
             )
 
         result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data))
