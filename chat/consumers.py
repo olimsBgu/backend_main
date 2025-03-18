@@ -3,6 +3,7 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from chat.models import Chat, ChatMessage
+from api.models import User
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -61,30 +62,57 @@ class ChatConsumer(AsyncWebsocketConsumer):
         """ Обрабатывает входящие сообщения от клиента """
         data = json.loads(text_data)
         message = data.get("message", "").strip()
+        view_event_max_id = data.get("view_max_id_event", -1)
 
         if message:
             # Сохранить сообщение в БД
-            time = await self.save_message(self.user, self.room_group_name, message)
+            chat_message = await self.save_message(self.user, self.room_group_name, message)
+            time, mes_id = chat_message.created_at, chat_message.id
 
             # Отправить сообщение всем участникам чата
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     "type": "chat_message",
+                    "message_id": mes_id,
                     "public_id": str(self.user.public_id),
                     "message": message,
-                    "time": time.isoformat(timespec="milliseconds").split('+')[0] + "Z"
+                    "time": time.isoformat(timespec="milliseconds").split('+')[0] + "Z",
+                    "is_viewed": chat_message.is_viewed
                 }
             )
+
+        if not view_event_max_id == -1:
+            flag = await self.viewed_message(room_name=self.room_group_name, view_event_id=view_event_max_id)
+            if flag:
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        "type": "update_view",
+                        "message_id": view_event_max_id,
+                        "public_id": str(self.user.public_id)
+                    }
+                )
 
     async def chat_message(self, event):
         """ Отправляет сообщение клиенту """
         await self.send(text_data=json.dumps({
-            "type": "chat_message",
+            "type": event["type"],
+            "message_id": event["message_id"],
             "public_id": str(event["public_id"]),
             "message": event["message"],
-            "time": event["time"]
+            "time": event["time"],
+            "is_viewed": event["is_viewed"]
         }))
+
+    async def update_view(self, event):
+        await self.send(text_data=json.dumps({
+            "type": event["type"],
+            "message_id": event["message_id"],
+            "public_id": str(event["public_id"])
+        }))
+
+
 
     @database_sync_to_async
     def is_chat_exists(self, user_id_1, user_id_2):
@@ -101,7 +129,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         chat = Chat.objects.get(ws_key=room_name)
         if chat:
             chat_message = ChatMessage.objects.create(chat=chat, sender=user, content=content)
-            return chat_message.created_at
+            return chat_message
 
     @database_sync_to_async
     def fetch_messages(self, room_name):
@@ -110,7 +138,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if chat:
             messages = ChatMessage.objects.filter(chat=chat).order_by("-created_at")
             return [
-                {"public_id": str(msg.sender.public_id), "message": msg.content, "time": msg.created_at.isoformat(timespec="milliseconds").split('+')[0] + "Z"}
+                {"public_id": str(msg.sender.public_id), "message_id": msg.id, "message": msg.content,
+                 "time": msg.created_at.isoformat(timespec="milliseconds").split('+')[0] + "Z",
+                 "is_viewed": msg.is_viewed}
                 for msg in reversed(messages)
             ]
         return []
+
+    @database_sync_to_async
+    def viewed_message(self, room_name, view_event_id):
+        chat = Chat.objects.get(ws_key=room_name)
+        if chat:
+            user = User.objects.get(public_id=str(self.user.public_id))
+            if user:
+                ChatMessage.objects.filter(chat=chat, id__lte=view_event_id, is_viewed=False).exclude(
+                    sender=user.id).update(
+                    is_viewed=True)
+                return True
+        return False
