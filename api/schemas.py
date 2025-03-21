@@ -223,6 +223,7 @@ class ChatMessageSchema(Schema):
     sender_id: UUID
     content: str
     created_at: str
+    is_viewed: bool
 
 
 class ChatSchema(Schema):
