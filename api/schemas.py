@@ -38,7 +38,7 @@ class UserProfileSchema(ModelSchema):
     plus references to city/university/field_of_study by name or ID.
     """
     public_id: UUID
-    images: dict[int, str] = Field(default_factory=dict)
+    images: list[dict[str, str]] = Field(default_factory=list[Field(default_factory=dict)])
 
     city: Optional[str] = None
     university: Optional[str] = None
@@ -57,8 +57,8 @@ class UserProfileSchema(ModelSchema):
         ]
 
     @staticmethod
-    def resolve_images(obj: User) -> dict[int, str]:
-        return {img.id: img.file.url for img in obj.images.all()}
+    def resolve_images(obj: User) -> list[dict[str, str]]:
+        return [{"id": str(img.id), "path": img.file.url} for img in obj.images.all()]
 
     @staticmethod
     def resolve_city(obj: User) -> Optional[str]:
@@ -126,7 +126,7 @@ class SimpleUserSchema(ModelSchema):
     """
     A "simple" schema with fewer fields, e.g., used for user lists / "potential pairs".
     """
-    images: dict[int, str] = Field(default_factory=dict)
+    images: list[dict[str, str]] = Field(default_factory=list)
 
     city: Optional[str] = None
     university: Optional[str] = None
@@ -141,8 +141,8 @@ class SimpleUserSchema(ModelSchema):
         ]
 
     @staticmethod
-    def resolve_images(obj: User) -> dict[int, str]:
-        return {img.id: img.file.url for img in obj.images.all()}
+    def resolve_images(obj: User) -> list[dict[str, str]]:
+        return [{"id": img.id, "path": img.file.url} for img in obj.images.all()]
 
     @staticmethod
     def resolve_city(obj: User) -> Optional[str]:
@@ -230,3 +230,5 @@ class ChatSchema(Schema):
     ws_key: str
     user_ids: List[UUID]
     last_message: Optional[ChatMessageSchema]
+    interlocutor_name: str
+    interlocutor_image: Optional[str]
