@@ -513,6 +513,8 @@ def chats(request):
     user_chats = Chat.objects.filter(users=user)
     result = []
     for chat in user_chats:
+        partner = chat.users.exclude(public_id=user.public_id).first()
+
         user_ids = [u.public_id for u in chat.users.all()]
 
         # Берём последнее сообщение, если оно есть
@@ -526,7 +528,7 @@ def chats(request):
                 is_viewed=last_message.is_viewed,
             )
 
-        result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data))
+        result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data, partner_name = partner.name, partner_image = partner.images.last().file.url if partner.images.last() is not None else None))
 
     return result
 
