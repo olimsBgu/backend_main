@@ -513,15 +513,7 @@ def chats(request):
     user_chats = Chat.objects.filter(users=user)
     result = []
     for chat in user_chats:
-        partner_name = ""
-        partner_image = None
-        for u in chat.users.all():
-            if u.public_id != user.public_id:
-                print(u.name)
-                print(u.images)
-                partner_name = u.name
-                if u.images.last():
-                    partner_image = u.images.last().file.url
+        partner = chat.users.exclude(public_id=user.public_id).first()
 
         user_ids = [u.public_id for u in chat.users.all()]
 
@@ -536,7 +528,7 @@ def chats(request):
                 is_viewed=last_message.is_viewed,
             )
 
-        result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data, partner_name = partner_name, partner_image = partner_image))
+        result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data, partner_name = partner.name, partner_image = partner.images.last().file.url))
 
     return result
 
