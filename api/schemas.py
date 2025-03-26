@@ -230,5 +230,5 @@ class ChatSchema(Schema):
     ws_key: str
     user_ids: List[UUID]
     last_message: Optional[ChatMessageSchema]
-    partner_name: str
-    partner_image: Optional[str]
+    interlocutor_name: str
+    interlocutor_image: Optional[str]
