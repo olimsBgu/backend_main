@@ -287,6 +287,7 @@ def get_potential_pairs(request, pagination: PaginationQuery = Query(...)):
 
     # Pending (either from_user=user or to_user=user)
     pending_from = Pending.objects.filter(from_user=user).values_list('to_user_id', flat=True)
+    pending_to = Pending.objects.filter(to_user=user).values_list('from_user_id', flat=True)
 
     # (matched (either user_a=user or user_b=user)
     # We'll collect the "other" user's IDs from all matches involving me
@@ -297,7 +298,7 @@ def get_potential_pairs(request, pagination: PaginationQuery = Query(...)):
         matched_ids.add(m.user_b_id)
 
     # Build a single set of excluded IDs
-    excluded_ids = set(viewed_ids) | set(pending_from) | matched_ids
+    excluded_ids = set(viewed_ids) | set(pending_from) | set(pending_to) | matched_ids
     base_qs = base_qs.exclude(id__in=excluded_ids)
 
     # Annotate priority: same city, shared interests
