@@ -224,8 +224,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost",
     "https://localhost:4200",
     "https://localhost",
-    "https://frontend-main-9781024811.us-central1.run.app/",
-    "http://frontend-main-9781024811.us-central1.run.app/",
+    "https://frontend-main-9781024811.us-central1.run.app",
+    "http://frontend-main-9781024811.us-central1.run.app"
 ]
 CORS_ALLOW_CREDENTIALS = True
 
