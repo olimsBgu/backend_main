@@ -527,7 +527,7 @@ def chats(request):
                 is_viewed=last_message.is_viewed,
             )
 
-        result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data, partner_name = partner.name, partner_image = partner.images.last().file.url if partner.images.last() is not None else None))
+        result.append(ChatSchema(ws_key=chat.ws_key, user_ids=user_ids, last_message=last_message_data, partner_name = partner.name, partner_image = partner.images.last().file.url))
 
     return result
 
