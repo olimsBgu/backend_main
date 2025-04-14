@@ -1,20 +1,48 @@
 import logging
+import random
 import traceback
+from datetime import timedelta
+from functools import lru_cache
 from pathlib import Path
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin
 from django.contrib import messages
+from django.db.models import Count
+from django.db.models.functions import TruncMonth
 from django.shortcuts import redirect
-from django.conf import settings
 from django.urls import path
 from django.utils.html import format_html
+from django.utils.timezone import now
+from unfold.admin import ModelAdmin
+from unfold.components import register_component, BaseComponent
+from unfold.widgets import INPUT_CLASSES
 
 from .models import User, Interest, University, City, FieldOfStudy, Image, Pending, Match
 
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(settings.BASE_DIR) / "data"
+
+@register_component
+class UserRegistrationsChart(BaseComponent):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        data = (
+            User.objects
+            .annotate(month=TruncMonth("date_joined"))
+            .values("month")
+            .annotate(count=Count("id"))
+            .order_by("month")
+        )
+
+        context.update({
+            "labels": [item["month"].strftime("%b %Y") for item in data],
+            "data": [item["count"] for item in data],
+        })
+        return context
 
 
 def read_data_file(file_name: str):
@@ -45,6 +73,7 @@ class UserAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["raw_login_code"].widget.attrs["class"] = " ".join(INPUT_CLASSES)
         # Make all fields optional except for 'email'
         for field_name, field in self.fields.items():
             if field_name not in {"email"}:
@@ -142,7 +171,7 @@ class ImageInline(admin.TabularInline):
 
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(ModelAdmin):
     form = UserAdminForm
     list_display = ('email', 'name', 'surname', 'user_type', 'active', 'approved')
     list_filter = ('user_type', 'active', 'approved')
@@ -192,7 +221,7 @@ class UserAdmin(admin.ModelAdmin):
 
 
 @admin.register(Pending)
-class PendingAdmin(admin.ModelAdmin):
+class PendingAdmin(ModelAdmin):
     form = PendingAdminForm
 
     list_display = ('id', 'from_user', 'to_user', 'created_at')
@@ -202,7 +231,7 @@ class PendingAdmin(admin.ModelAdmin):
 
 
 @admin.register(Match)
-class MatchAdmin(admin.ModelAdmin):
+class MatchAdmin(ModelAdmin):
     form = MatchAdminForm
 
     list_display = ('id', 'user_a', 'user_b', 'status', 'created_at')
@@ -211,7 +240,7 @@ class MatchAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
 
 
-class DataUpdateAdmin(admin.ModelAdmin):
+class DataUpdateAdmin(ModelAdmin):
     """
     A reusable base admin class that:
       - Defines a custom URL for "update" actions.
@@ -319,3 +348,82 @@ class FieldOfStudyAdmin(DataUpdateAdmin):
     update_button_name = "Update fields of study"
     list_display = ("id", "name")
     search_fields = ("name",)
+
+
+@lru_cache
+def cohort_random_data():
+    rows = []
+    headers = []
+    cols = []
+
+    dates = reversed(
+        [(now() - timedelta(days=x)).strftime("%B %d, %Y") for x in range(8)]
+    )
+    groups = range(1, 10)
+
+    for row_index, date in enumerate(dates):
+        cols = []
+
+        for col_index, _col in enumerate(groups):
+            color_index = 8 - row_index - col_index
+            col_classes = []
+
+            if color_index > 0:
+                col_classes.append(
+                    f"bg-primary-{color_index}00 dark:bg-primary-{9 - color_index}00"
+                )
+
+            if color_index >= 4:
+                col_classes.append("text-white dark:text-base-600")
+
+            value = random.randint(
+                4000 - (col_index * row_index * 225),
+                5000 - (col_index * row_index * 225),
+            )
+
+            subtitle = f"{random.randint(10, 100)}%"
+
+            if value <= 0:
+                value = 0
+                subtitle = None
+
+            cols.append(
+                {
+                    "value": value,
+                    "color": " ".join(col_classes),
+                    "subtitle": subtitle,
+                }
+            )
+
+        rows.append(
+            {
+                "header": {
+                    "title": date,
+                    "subtitle": f"Total {sum(col['value'] for col in cols):,}",
+                },
+                "cols": cols,
+            }
+        )
+
+    for index, group in enumerate(groups):
+        total = sum(row["cols"][index]["value"] for row in rows)
+
+        headers.append(
+            {
+                "title": f"Group #{group}",
+                "subtitle": f"Total {total:,}",
+            }
+        )
+
+    return {
+        "headers": headers,
+        "rows": rows,
+    }
+
+@register_component
+class CohortComponent(BaseComponent):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["data"] = cohort_random_data()
+        return context
+

@@ -13,6 +13,9 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -32,6 +35,13 @@ CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost").spl
 # Application definition
 
 INSTALLED_APPS = [
+    "unfold",
+    "unfold.contrib.filters",
+    "unfold.contrib.import_export",
+    "unfold.contrib.guardian",
+    "unfold.contrib.simple_history",
+    "unfold.contrib.forms",
+    "unfold.contrib.inlines",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -46,6 +56,93 @@ INSTALLED_APPS = [
     "api",
     "chat"
 ]
+
+UNFOLD = {
+    "SITE_HEADER": "RIMONIM Admin",
+    "DASHBOARD_CALLBACK": "api.views.dashboard_callback",
+    "COLORS": {
+        "base": {
+            "50": "249 250 251",
+            "100": "243 244 246",
+            "200": "229 231 235",
+            "300": "209 213 219",
+            "400": "156 163 175",
+            "500": "107 114 128",
+            "600": "75 85 99",
+            "700": "55 65 81",
+            "800": "31 41 55",
+            "900": "17 24 39",
+            "950": "3 7 18",
+        },
+        "primary": {
+            "50": "240 249 255",
+            "100": "224 242 254",
+            "200": "186 230 253",
+            "300": "125 211 252",
+            "400": "56 189 248",
+            "500": "14 165 233",
+            "600": "2 132 199",
+            "700": "3 105 161",
+            "800": "7 89 133",
+            "900": "12 74 110",
+            "950": "8 47 73",
+        }
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": _("Navigation"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Dashboard"),
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
+                        "title": _("Users"),
+                        "icon": "people",
+                        "link": reverse_lazy("admin:api_user_changelist"),
+                    },
+                    {
+                        "title": _("Matches"),
+                        "icon": "favorite",
+                        "link": reverse_lazy("admin:api_match_changelist"),
+                    },
+                    {
+                        "title": _("Pending"),
+                        "icon": "timer",
+                        "link": reverse_lazy("admin:api_pending_changelist"),
+                    },
+                    {
+                        "title": _("Universities"),
+                        "icon": "school",
+                        "link": reverse_lazy("admin:api_university_changelist"),
+                    },
+                    {
+                        "title": _("Interests"),
+                        "icon": "emoji_objects",
+                        "link": reverse_lazy("admin:api_interest_changelist"),
+                    },
+                    {
+                        "title": _("Cities"),
+                        "icon": "location_city",
+                        "link": reverse_lazy("admin:api_city_changelist"),
+                    },
+                    {
+                        "title": _("Fields of Study"),
+                        "icon": "library_books",
+                        "link": reverse_lazy("admin:api_fieldofstudy_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -64,7 +161,7 @@ ROOT_URLCONF = "rimonim.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -215,7 +312,6 @@ LOGGING = {
         },
     },
 }
-
 
 CORS_ALLOWED_ORIGINS = [
     "https://app.rimonim.me",

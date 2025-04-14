@@ -1,5 +1,7 @@
+import json
 import random
 import string
+from typing import List
 from uuid import UUID
 
 from django.conf import settings
@@ -7,7 +9,10 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db.models import Q, Case, When, IntegerField, Count
+from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
+from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
 from ninja import Router, Query, Form
 from ninja import UploadedFile, File
 from ninja.errors import HttpError
@@ -15,10 +20,9 @@ from ninja.security import HttpBearer
 from ninja_jwt.authentication import JWTAuth
 from ninja_jwt.schema import TokenRefreshInputSchema, TokenRefreshOutputSchema
 from ninja_jwt.tokens import RefreshToken
-from typing import List
 
+from chat.models import Chat
 from .models import User, Interest, University, City, FieldOfStudy, Image, Pending, Match
-from chat.models import Chat, ChatMessage
 from .schemas import UpdateProfileSchema, UserListSchema, ImageResponseSchema, \
     RequestApprovalSchema, MessageSchema, UserProfileSchema, MatchCreationSchema, SimpleUserSchema, PaginationQuery
 from .schemas import VerifyEmailSchema, RequestCodeSchema, VerifyCodeSchema, LogoutSchema, InterestSchema, \
@@ -530,6 +534,7 @@ def chats(request):
 
     return result
 
+
 @router.get("/user/saved", response=UserListSchema, auth=JWTBearer())
 def get_saved_users(request, pagination: PaginationQuery = Query(...)):
     """
@@ -553,3 +558,85 @@ def get_saved_users(request, pagination: PaginationQuery = Query(...)):
         "total_pages": paginator.num_pages,
         "has_next": page_obj.has_next(),
     }
+
+
+def dashboard_callback(request, context):
+    WEEKDAYS = [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun",
+    ]
+    positive = [[1, random.randrange(8, 28)] for i in range(1, 28)]
+    performance_positive = [[1, random.randrange(8, 28)] for i in range(1, 28)]
+    performance_negative = [[-1, -random.randrange(8, 28)] for i in range(1, 28)]
+
+    user_data = (
+        User.objects
+        .annotate(month=TruncMonth("date_joined"))
+        .values("month")
+        .annotate(count=Count("id"))
+        .order_by("month")
+    )
+
+    match_data = (
+        Match.objects
+        .annotate(month=TruncMonth("created_at"))
+        .values("month")
+        .annotate(count=Count("id"))
+        .order_by("month")
+    )
+
+    performance = [
+        {
+            "title": _("Likes"),
+            "metric": "1234",
+            "footer": mark_safe(
+                '<strong class="text-green-600 font-medium">+3.14%</strong>&nbsp;progress from last week'
+            ),
+            "chart": json.dumps(
+                {
+                    "labels": [WEEKDAYS[day % 7] for day in range(1, 28)],
+                    "datasets": [
+                        {
+                            "data": performance_positive,
+                            "borderColor": "var(--color-primary-700)",
+                        }
+                    ],
+                }
+            ),
+        },
+        {
+            "title": _("Matches"),
+            "metric": "123",
+            "footer": mark_safe(
+                '<strong class="text-green-600 font-medium">+3.14%</strong>&nbsp;progress from last week'
+            ),
+            "chart": json.dumps(
+                {
+                    "labels": [WEEKDAYS[day % 7] for day in range(1, 28)],
+                    "datasets": [
+                        {
+                            "data": performance_positive,
+                            "borderColor": "var(--color-primary-300)",
+                        }
+                    ],
+                }
+            ),
+        },
+    ]
+    context.update({
+        "chart_labels": [x["month"].strftime("%b %Y") for x in user_data],
+        "chart_data": [x["count"] for x in user_data],
+        "match_chart_labels": [x["month"].strftime("%b %Y") for x in match_data],
+        "match_chart_data": [x["count"] for x in match_data],
+        "total_users": User.objects.count(),
+        "total_matches": Match.objects.count(),
+        "total_likes": Pending.objects.count(),
+        "performance": performance,
+    })
+
+    return context

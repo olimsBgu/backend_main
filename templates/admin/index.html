@@ -1,0 +1,39 @@
+{% extends 'unfold/layouts/base_simple.html' %}
+{% load i18n unfold %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block title %}
+    {% trans 'Dashboard' %} | {{ site_title|default:_('Django site admin') }}
+{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+    {% include "unfold/helpers/messages.html" %}
+    {% component "unfold/components/container.html" %}
+        <div class="flex flex-col gap-6">
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" %}User Registrations Over Time{% endcomponent %}
+                {% component "unfold/components/chart/cohort.html" with component_class="CohortComponent" %}{% endcomponent %}
+            {% endcomponent %}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {% for stats in performance %}
+                    {% component "unfold/components/card.html" %}
+                        {% component "unfold/components/text.html" %}
+                            {{ stats.title }}
+                        {% endcomponent %}
+
+                        {% component "unfold/components/title.html" with class="mb-8" %}
+                            {{ stats.metric }}
+                        {% endcomponent %}
+
+                        {% component "unfold/components/chart/line.html" with data=stats.chart %}{% endcomponent %}
+                    {% endcomponent %}
+                {% endfor %}
+            </div>
+        </div>
+    {% endcomponent %}
+{% endblock %}

@@ -13,3 +13,4 @@ django-cors-headers
 pillow
 channels
 daphne
+django-unfold
