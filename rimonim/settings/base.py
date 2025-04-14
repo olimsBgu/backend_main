@@ -59,6 +59,8 @@ INSTALLED_APPS = [
 
 UNFOLD = {
     "SITE_HEADER": "RIMONIM Admin",
+    "SITE_TITLE": "RIMONIM Admin Panel",
+    "SITE_URL": False,
     "DASHBOARD_CALLBACK": "api.views.dashboard_callback",
     "COLORS": {
         "base": {

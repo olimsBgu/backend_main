@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(settings.BASE_DIR) / "data"
 
+admin.site.site_url = None
+
 @register_component
 class UserRegistrationsChart(BaseComponent):
     def get_context_data(self, **kwargs):
