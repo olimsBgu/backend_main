@@ -121,6 +121,11 @@ UNFOLD = {
                         "link": reverse_lazy("admin:api_pending_changelist"),
                     },
                     {
+                        "title": _("Chats"),
+                        "icon": "chat",
+                        "link": reverse_lazy("admin:chat_chat_changelist"),
+                    },
+                    {
                         "title": _("Universities"),
                         "icon": "school",
                         "link": reverse_lazy("admin:api_university_changelist"),

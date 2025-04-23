@@ -9,17 +9,19 @@ from django import forms
 from django.conf import settings
 from django.contrib import admin
 from django.contrib import messages
+from django.contrib.admin.widgets import AutocompleteSelect
+from django.core.exceptions import ValidationError
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.shortcuts import redirect
-from django.urls import path
+from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.timezone import now
 from unfold.admin import ModelAdmin
 from unfold.components import register_component, BaseComponent
 from unfold.widgets import INPUT_CLASSES
 
-from chat.models import Chat
+from chat.models import Chat, ChatMessage
 from .models import User, Interest, University, City, FieldOfStudy, Image, Pending, Match
 
 logger = logging.getLogger(__name__)
@@ -430,23 +432,126 @@ class CohortComponent(BaseComponent):
         context["data"] = cohort_random_data()
         return context
 
+class ChatCreateForm(forms.ModelForm):
+    """
+    Custom 'add chat' form that presents two user selectors instead of
+    the raw ManyToMany widget.
+    """
+    user_a = forms.ModelChoiceField(
+        queryset=User.objects.all(),
+        widget=AutocompleteSelect(Chat._meta.get_field("users"), admin.site),
+        label="User A",
+        help_text="First participant",
+    )
+    user_b = forms.ModelChoiceField(
+        queryset=User.objects.all(),
+        widget=AutocompleteSelect(Chat._meta.get_field("users"), admin.site),
+        label="User B",
+        help_text="Second participant",
+    )
+
+    class Meta:
+        model   = Chat
+        fields  = ("user_a", "user_b")  # we hide ws_key & users m2m
+
+    def clean(self):
+        cleaned = super().clean()
+        a, b = cleaned.get("user_a"), cleaned.get("user_b")
+
+        if a and b and a == b:
+            raise ValidationError("A user cannot chat with themselves.")
+        return cleaned
+
+    def save_m2m(self):
+        pass
+
+    def save(self, commit=True):
+        a, b = self.cleaned_data["user_a"], self.cleaned_data["user_b"]
+
+        # Build canonical key (same order no matter who is first)
+        sorted_ids = sorted([str(a.public_id), str(b.public_id)])
+        ws_key = f"chat_{'_'.join(sorted_ids)}"
+
+        chat, created = Chat.objects.get_or_create(ws_key=ws_key)
+
+        # Ensure exactly the two chosen users are set
+        chat.users.set([a, b], clear=True)
+
+        if commit:
+            chat.save()
+
+        # Let the admin know if we re-used an existing chat
+        self._created = created
+        return chat
+
+
 @admin.register(Chat)
 class ChatAdmin(ModelAdmin):
-    list_display = ("ws_key", "participants", "user_count")
-    search_fields = ("ws_key", "users__email", "users__name", "users__surname")
-    filter_horizontal = ("users",)
-    ordering = ("ws_key",)
+    autocomplete_fields = ("users",)
 
-    def participants(self, obj):
+    list_display = (
+        "details_link",          # ← new first column
+        "user_a_email",
+        "user_b_email",
+        "message_count",
+        "last_message_at",
+    )
+    list_display_links = ("details_link",)  # only this column opens the chat
+
+    readonly_fields = ("ws_key", "users")
+    ordering = ("-messages__created_at",)
+    search_fields = ("users__email", "users__name", "users__surname")
+
+    # use custom form only in the “add” page
+    def get_form(self, request, obj=None, **kwargs):
+        if obj is None:
+            kwargs["form"] = ChatCreateForm
+        return super().get_form(request, obj, **kwargs)
+
+    # -------- prettified columns ----------
+    def _two_users(self, obj):
         """
-        Comma-separated list of user emails for quick reference.
+        Returns the two participants ordered by email.
         """
-        emails = obj.users.values_list("email", flat=True)
-        return ", ".join(emails)
+        return obj.users.order_by("email")[:2]
+    @admin.display(description="Details")
+    def details_link(self, obj):
+        url = reverse("admin:chat_chat_change", args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="text-primary-500 font-semibold">open</a>', url
+        )
 
-    participants.short_description = "Users"
+    @admin.display(description="User A")
+    def user_a_email(self, obj):
+        user = self._two_users(obj)[0] if obj.users.count() else None
+        return self._user_link(user)
 
-    def user_count(self, obj):
-        return obj.users.count()
+    @admin.display(description="User B")
+    def user_b_email(self, obj):
+        users = self._two_users(obj)
+        return self._user_link(users[1]) if len(users) == 2 else "-"
 
-    user_count.short_description = "# users"
+    def _user_link(self, user):
+        if not user:
+            return "-"
+        url = reverse("admin:api_user_change", args=[user.pk])
+        return format_html('<a href="{}">{}</a>', url, user.email)
+
+    @admin.display(description="Messages")
+    def message_count(self, obj):
+        return obj.messages.count()
+
+    @admin.display(description="Last message at", ordering="messages__created_at")
+    def last_message_at(self, obj):
+        last = obj.messages.order_by("-created_at").first()
+        return last.created_at if last else "-"
+
+    # nicer info message when we re-use an existing chat
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change and isinstance(form, ChatCreateForm) and not getattr(form, "_created", True):
+            self.message_user(
+                request,
+                "That chat already existed — re-using the same room.",
+                messages.INFO,
+            )
