@@ -19,6 +19,7 @@ from unfold.admin import ModelAdmin
 from unfold.components import register_component, BaseComponent
 from unfold.widgets import INPUT_CLASSES
 
+from chat.models import Chat
 from .models import User, Interest, University, City, FieldOfStudy, Image, Pending, Match
 
 logger = logging.getLogger(__name__)
@@ -429,3 +430,23 @@ class CohortComponent(BaseComponent):
         context["data"] = cohort_random_data()
         return context
 
+@admin.register(Chat)
+class ChatAdmin(ModelAdmin):
+    list_display = ("ws_key", "participants", "user_count")
+    search_fields = ("ws_key", "users__email", "users__name", "users__surname")
+    filter_horizontal = ("users",)
+    ordering = ("ws_key",)
+
+    def participants(self, obj):
+        """
+        Comma-separated list of user emails for quick reference.
+        """
+        emails = obj.users.values_list("email", flat=True)
+        return ", ".join(emails)
+
+    participants.short_description = "Users"
+
+    def user_count(self, obj):
+        return obj.users.count()
+
+    user_count.short_description = "# users"
