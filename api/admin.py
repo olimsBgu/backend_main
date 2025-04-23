@@ -502,6 +502,18 @@ class ChatAdmin(ModelAdmin):
     ordering = ("-messages__created_at",)
     search_fields = ("users__email", "users__name", "users__surname")
 
+    def get_readonly_fields(self, request, obj=None):
+        """
+        Show ws_key & users only on the edit page (obj is not None).
+        """
+        return ("ws_key", "users") if obj else ()
+
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if obj is None:                                    # add-view
+            return [f for f in fields if f not in ("ws_key", "users")]
+        return fields
+
     # use custom form only in the “add” page
     def get_form(self, request, obj=None, **kwargs):
         if obj is None:
